@@ -156,7 +156,7 @@ WEB_CONCURRENCY=4
 
 Gunicorn runs with gevent workers for better concurrency:
 
-```bash
+```text
 gunicorn -w ${GUNICORN_WORKERS:-4} \
   --bind 0.0.0.0:8000 \
   --timeout=120 \
@@ -232,7 +232,7 @@ Kuma uses Django's settings module system:
 
 The active settings module is selected with:
 
-```bash
+```text
 DJANGO_SETTINGS_MODULE=kuma.settings.prod
 ```
 
@@ -302,7 +302,7 @@ from sentry_sdk.integrations.django import DjangoIntegration
 
 Set the Sentry DSN environment variable:
 
-```bash
+```text
 SENTRY_DSN=https://your-dsn@sentry.io/project-id
 ```
 

@@ -11,14 +11,14 @@ All endpoints require authentication. Non-subscribers are limited to `MAX_NON_SU
 
 ## Base Paths
 
-```
+```text
 /api/v1/plus/notifications/    # Notification management
 /api/v1/plus/watching/          # Watch management
 ```
 
 ## Get Notifications
 
-```
+```text
 GET /api/v1/plus/notifications/
 ```
 
@@ -115,7 +115,7 @@ Retrieve user's notifications with filtering and pagination.
 
 ## Mark Notification as Read
 
-```
+```text
 POST /api/v1/plus/notifications/{id}/mark-as-read/
 ```
 
@@ -131,7 +131,7 @@ Mark a specific notification as read.
 
 ## Mark All as Read
 
-```
+```text
 POST /api/v1/plus/notifications/all/mark-as-read/
 ```
 
@@ -147,7 +147,7 @@ Mark all unread notifications as read.
 
 ## Toggle Starred
 
-```
+```text
 POST /api/v1/plus/notifications/{id}/toggle-starred/
 ```
 
@@ -165,7 +165,7 @@ HTTP Status: `200 OK`
 
 ### Response (Error)
 
-```
+```text
 "no matching notification"
 ```
 
@@ -173,7 +173,7 @@ HTTP Status: `400 Bad Request`
 
 ## Star Multiple Notifications
 
-```
+```text
 POST /api/v1/plus/notifications/star-ids/
 ```
 
@@ -201,7 +201,7 @@ Star multiple notifications at once.
 
 ## Unstar Multiple Notifications
 
-```
+```text
 POST /api/v1/plus/notifications/unstar-ids/
 ```
 
@@ -215,7 +215,7 @@ Remove star from multiple notifications.
 
 ## Delete Notification
 
-```
+```text
 POST /api/v1/plus/notifications/{id}/delete/
 ```
 
@@ -231,7 +231,7 @@ Soft-delete a notification (mark as deleted).
 
 ## Undo Deletion
 
-```
+```text
 POST /api/v1/plus/notifications/{id}/undo-deletion/
 ```
 
@@ -239,7 +239,7 @@ Restore a deleted notification.
 
 ## Delete Multiple Notifications
 
-```
+```text
 POST /api/v1/plus/notifications/delete-ids/
 ```
 
@@ -259,7 +259,7 @@ Delete multiple notifications at once.
 
 ## Get Watched Pages
 
-```
+```text
 GET /api/v1/plus/watching/
 ```
 
@@ -381,7 +381,7 @@ Or if not watching:
 
 ## Watch/Unwatch Page
 
-```
+```text
 POST /api/v1/plus/watching/
 ```
 
@@ -479,7 +479,7 @@ curl -X POST "https://developer.mozilla.org/api/v1/plus/watching/?url=/en-US/doc
 
 ## Unwatch Multiple Pages
 
-```
+```text
 POST /api/v1/plus/unwatch-many/
 ```
 

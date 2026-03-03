@@ -147,18 +147,18 @@ Notification and watch APIs are mounted at `/api/v1/plus/notifications/` and `/a
 ### Notification Actions
 
 **Mark as Read**:
-```
+```text
 POST /api/v1/plus/notifications/{id}/mark-as-read/
 POST /api/v1/plus/notifications/all/mark-as-read/
 ```
 
 **Toggle Starred**:
-```
+```text
 POST /api/v1/plus/notifications/{id}/toggle-starred/
 ```
 
 **Batch Star/Unstar**:
-```
+```text
 POST /api/v1/plus/notifications/star-ids/
 Body: {"ids": [1, 2, 3]}
 
@@ -167,14 +167,14 @@ Body: {"ids": [1, 2, 3]}
 ```
 
 **Delete**:
-```
+```text
 POST /api/v1/plus/notifications/{id}/delete/
 POST /api/v1/plus/notifications/delete-ids/
 Body: {"ids": [1, 2, 3]}
 ```
 
 **Undo Deletion**:
-```
+```text
 POST /api/v1/plus/notifications/{id}/undo-deletion/
 ```
 
@@ -266,7 +266,7 @@ Returns `"status": "unwatched"` if the page is not being watched.
 ```
 
 **Unwatch Multiple**:
-```
+```text
 POST /api/v1/plus/watch/unwatch-many/
 Body: {"unwatch": ["/en-us/docs/web/javascript", "/en-us/docs/web/css"]}
 ```
@@ -337,7 +337,7 @@ Notifications are created when watched pages are updated.
 
 Admin endpoint for manually creating content update notifications:
 
-```
+```text
 POST /api/v1/plus/admin/update/content/
 Body: {
   "page": "/en-US/docs/Web/JavaScript",
@@ -369,7 +369,7 @@ The `process_changes()` function (kuma/notifications/utils.py) handles:
 
 The system can process bulk changes from GitHub webhooks or CI/CD:
 
-```
+```text
 POST /api/v1/plus/admin/update/
 Body: {"filename": "changes.json"}
 ```
