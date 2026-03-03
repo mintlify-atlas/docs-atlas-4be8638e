@@ -1,0 +1,116 @@
+{
+  "projectType": "saas",
+  "projectName": "Kuma",
+  "projectDescription": "The deprecated Django-based platform that powered MDN Web Docs (developer.mozilla.org).",
+  "theme": "aspen",
+  "primaryColor": "#0060df",
+  "lightColor": "#0a84ff",
+  "darkColor": "#003eaa",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "introduction",
+              "architecture",
+              "deprecation-notice"
+            ]
+          },
+          {
+            "group": "Getting Started",
+            "pages": [
+              "installation",
+              "quickstart",
+              "docker-setup"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "development/local-development",
+              "development/running-tests",
+              "development/database-migrations",
+              "development/dependencies",
+              "development/environment-variables"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/user-authentication",
+              "features/document-management",
+              "features/search",
+              "features/attachments",
+              "features/bookmarks",
+              "features/notifications"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/docker",
+              "deployment/configuration",
+              "deployment/maintenance-mode",
+              "deployment/monitoring"
+            ]
+          },
+          {
+            "group": "Contributing",
+            "pages": [
+              "contributing/guidelines",
+              "contributing/code-style",
+              "contributing/testing",
+              "contributing/pull-requests"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "API Overview",
+            "pages": [
+              "api/overview",
+              "api/authentication"
+            ]
+          },
+          {
+            "group": "Endpoints",
+            "pages": [
+              "api/search",
+              "api/settings",
+              "api/plus/bookmarks",
+              "api/plus/notifications",
+              "api/plus/landing-page"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Django-based web platform for hosting documentation",
+    "Full-text search with Elasticsearch",
+    "User authentication via Mozilla FxA (OIDC)",
+    "RESTful API with Django Ninja",
+    "Celery-based background task processing",
+    "Docker containerized deployment",
+    "Document attachment management",
+    "User bookmarks and notifications",
+    "Maintenance mode for read-only operations"
+  ],
+  "publicApiSurface": [
+    "/api/v1/search",
+    "/api/v1/settings",
+    "/api/v1/plus/notifications/",
+    "/api/v1/plus/collection/",
+    "/api/v1/plus/landing-page/",
+    "/admin-api/",
+    "/users/fxa/login/",
+    "/health/"
+  ]
+}
