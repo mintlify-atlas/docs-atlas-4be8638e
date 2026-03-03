@@ -1,0 +1,126 @@
+---
+title: Code Style
+description: Python code style conventions for the Kuma project including PEP8, flake8, black, and isort
+---
+
+Maintaining consistent code style helps keep the Kuma codebase maintainable and makes it easier to research problems.
+
+## Python Code Standards
+
+### PEP8 Compliance
+
+All Python code should follow [PEP8 standards](http://www.python.org/dev/peps/pep-0008/). The required subset of PEP8 is automatically checked by `flake8`.
+
+```bash
+make lint
+```
+
+This command runs `flake8` to check for PEP8 violations.
+
+### Docstring Conventions
+
+[PEP257](https://www.python.org/dev/peps/pep-0257/) docstring conventions are encouraged but not yet enforced. We recommend following these conventions for better code documentation.
+
+## Code Formatting Tools
+
+The Kuma project uses several automated tools to maintain consistent code style:
+
+### Black
+
+[Black](https://black.readthedocs.io/) is used as the code formatter. Configuration is in `pyproject.toml`:
+
+```toml
+[tool.black]
+target-version = ["py38"]
+```
+
+Run Black to format your code:
+
+```bash
+black kuma
+```
+
+<Tip>
+Many editors support Black integration for automatic formatting on save. This can help you maintain style consistency without thinking about it.
+</Tip>
+
+### isort
+
+[isort](https://pycqa.github.io/isort/) is used to sort and organize import statements. Configuration is in `pyproject.toml`:
+
+```toml
+[tool.isort]
+profile = "black"
+```
+
+The `profile = "black"` setting ensures isort and Black work together without conflicts.
+
+Run isort to organize imports:
+
+```bash
+isort kuma
+```
+
+### flake8
+
+[flake8](https://flake8.pycqa.org/) checks for PEP8 violations and code quality issues. The project includes `flake8-isort` to also check import order:
+
+```bash
+flake8 kuma
+```
+
+<Warning>
+All `flake8` errors must be fixed before your pull request can be merged. GitHub Actions will automatically run these checks.
+</Warning>
+
+## Style Preferences
+
+### String Quotes
+
+In Python code, we prefer:
+
+- `'single quotes'` for code strings
+- `"""triple double-quotes"""` for docstrings
+
+**Example:**
+
+```python
+def greet(name):
+    """Return a greeting message for the given name."""
+    return f'Hello, {name}!'
+```
+
+### Other Conventions
+
+Other style conventions (such as indentation and code organization) can be determined by reading existing code in the repository. When in doubt, look at similar files to see how things are done.
+
+## Front-End Standards
+
+Similar standards are enforced for front-end assets like CSS and JavaScript:
+
+- Some conventions are checked by automated tools
+- Others are verified during code review
+
+<Note>
+The same principle applies: consistency with existing code is valued, and you'll learn the conventions over time.
+</Note>
+
+## Running All Checks
+
+Before opening a pull request, run the linting checks:
+
+```bash
+make lint
+```
+
+This ensures your code meets the project's style standards and will pass GitHub Actions checks.
+
+## What Happens If Style Isn't Perfect?
+
+Don't worry if your code doesn't perfectly follow all conventions:
+
+- **New contributors** - PRs won't be rejected solely for style issues
+- **Code review** - Reviewers may suggest style improvements or make minor fixes themselves
+- **Learning process** - You'll naturally learn the conventions as you contribute more
+
+The automated tools (Black, isort, flake8) catch most issues, so focus on making sure those checks pass first.

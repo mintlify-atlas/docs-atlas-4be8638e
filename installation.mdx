@@ -1,0 +1,135 @@
+---
+title: Installation
+description: Install and set up Kuma for local development using Docker
+---
+
+Kuma uses Docker for local development and integration testing. This guide will walk you through installing Docker and setting up a local Kuma development environment.
+
+## Prerequisites
+
+Before installing Kuma, you'll need to install Docker on your system.
+
+### Install Docker
+
+<Steps>
+  <Step title="Install Docker platform">
+    Install the [Docker platform](https://www.docker.com/products/overview) following Docker's instructions for your operating system:
+    - **MacOS**: [Docker for Mac](https://docs.docker.com/docker-for-mac/)
+    - **Linux**: Follow instructions for your [Linux distribution](https://docs.docker.com/engine/installation/linux/)
+    - **Windows**: Docker Desktop for Windows
+  </Step>
+
+  <Step title="Linux users: Install Docker Compose">
+    If you're on Linux, you'll also need to install [Docker Compose](https://docs.docker.com/compose/install/) and follow the [post-install instructions](https://docs.docker.com/engine/installation/linux/linux-postinstall/) to ensure your user can run Docker commands without `sudo`.
+  </Step>
+
+  <Step title="Verify Docker installation">
+    Confirm that Docker is installed correctly by running:
+    ```bash
+    docker run hello-world
+    ```
+    If you encounter permission errors when running Docker commands without `sudo`, see [using Docker as a non-root user](https://docs.docker.com/engine/installation/linux/linux-postinstall/).
+  </Step>
+</Steps>
+
+## Clone the repository
+
+<Steps>
+  <Step title="Clone Kuma repository">
+    Clone the Kuma Git repository:
+    ```bash
+    git clone https://github.com/mdn/kuma.git
+    ```
+    If you plan to submit pull requests, consider forking the repository first and then cloning your fork.
+  </Step>
+
+  <Step title="Navigate to the directory">
+    Change into the kuma directory:
+    ```bash
+    cd kuma
+    ```
+  </Step>
+</Steps>
+
+## Configure environment variables
+
+<Steps>
+  <Step title="Copy the environment template">
+    Initialize your `.env` file from the template:
+    ```bash
+    cp .env-dist.dev .env
+    ```
+  </Step>
+
+  <Step title="Edit environment variables (Linux only)">
+    **Linux users**: Edit the `.env` file and uncomment the `UID` parameter to avoid file permission issues:
+    ```bash
+    UID=1000
+    ```
+    Change `#UID=1000` to `UID=1000` (or use your actual user ID from running `id` or `echo $UID`).
+    
+    **MacOS users**: You can use the default settings without any changes.
+  </Step>
+</Steps>
+
+## Build and start containers
+
+<Steps>
+  <Step title="Pull Docker images">
+    Download the pre-built Docker images:
+    ```bash
+    docker-compose pull
+    ```
+  </Step>
+
+  <Step title="Build containers">
+    Build the Docker containers:
+    ```bash
+    docker-compose build
+    ```
+    Note: This command is effectively a no-op at this point since the `pull` command already downloaded pre-built images.
+  </Step>
+
+  <Step title="Start the containers">
+    Start all containers in the background:
+    ```bash
+    docker-compose up -d
+    ```
+    Alternatively, you can use the Makefile shortcut:
+    ```bash
+    make up
+    ```
+  </Step>
+</Steps>
+
+## Verify installation
+
+Open your browser and visit [http://localhost.org:8000](http://localhost.org:8000). You should see the Kuma homepage. Congratulations - you've successfully installed Kuma!
+
+## Create an admin user
+
+Many Kuma settings require access to the Django admin interface. Create an admin account for local development:
+
+### Create a new superuser
+
+```bash
+docker-compose exec web ./manage.py createsuperuser
+```
+
+You'll be prompted for a username, email address (e.g., `admin@example.com`), and password.
+
+### Use an existing account
+
+If your database has an existing account you want to grant admin privileges:
+
+```bash
+docker-compose run --rm web ./manage.py ihavepower YOUR_USERNAME --password YOUR_PASSWORD
+```
+
+Once created, you can access the Django admin at [http://localhost.org:8000/admin/login](http://localhost.org:8000/admin/login).
+
+## Next steps
+
+- See [Quickstart](/quickstart) for common development tasks
+- Learn more about [Docker Setup](/docker-setup) for container management and configuration
+- Review the [development documentation](https://github.com/mdn/kuma/blob/main/CONTRIBUTING.md) for coding conventions

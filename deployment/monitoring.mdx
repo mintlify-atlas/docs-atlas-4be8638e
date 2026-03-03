@@ -1,0 +1,430 @@
+---
+title: Monitoring and Health Checks
+description: Monitor Kuma deployments with health check endpoints, logging configuration, and New Relic APM integration.
+---
+
+Kuma provides comprehensive monitoring capabilities through health check endpoints, structured logging, and integration with New Relic APM for production monitoring.
+
+## Health Check Endpoints
+
+Kuma exposes three health check endpoints for monitoring and orchestration systems (defined in `kuma/health/views.py` and `kuma/health/urls.py`).
+
+### Liveness Check
+
+**Endpoint**: `GET /healthz`
+
+**Purpose**: Confirms that Django is running and can accept requests.
+
+```bash
+curl -i http://localhost:8000/healthz
+```
+
+**Response**: HTTP 204 No Content (success) or 5xx (failure)
+
+```python
+@never_cache
+@require_safe
+def liveness(request):
+    """
+    A successful response proves that Django is up and running.
+    It doesn't verify supporting services (MySQL, Redis, Celery).
+    """
+    return HttpResponse(status=204)
+```
+
+<Note>
+The liveness check only verifies that Django can process requests. It doesn't check database connectivity or other dependencies.
+</Note>
+
+### Readiness Check
+
+**Endpoint**: `GET /readiness`
+
+**Purpose**: Confirms that the application is ready to serve traffic.
+
+```bash
+curl -i http://localhost:8000/readiness
+```
+
+**Response**: HTTP 204 No Content (ready) or 503 Service Unavailable (not ready)
+
+Currently, the readiness check returns the same result as liveness. In the past, it verified database connectivity:
+
+```python
+@never_cache
+@require_safe
+def readiness(request):
+    # Could be extended to check database, Redis, etc.
+    status, reason = 204, None
+    return HttpResponse(status=status, reason=reason)
+```
+
+<Note>
+Kubernetes uses the readiness check to determine if a pod should receive traffic. Pods failing readiness checks are removed from service load balancers.
+</Note>
+
+### Status Endpoint
+
+**Endpoint**: `GET /_kuma_status.json`
+
+**Purpose**: Returns detailed information about the Kuma instance, services, and configuration.
+
+```bash
+curl -s http://localhost:8000/_kuma_status.json | jq
+```
+
+**Response**: JSON with version, request info, service status, and settings
+
+```json
+{
+  "version": 1,
+  "request": {
+    "url": "http://localhost:8000/_kuma_status.json",
+    "host": "localhost:8000",
+    "is_secure": false,
+    "scheme": "http"
+  },
+  "services": {
+    "database": {
+      "available": true,
+      "populated": true
+    },
+    "search": {
+      "available": true,
+      "populated": true,
+      "health": {
+        "status": "green",
+        "cluster_name": "elasticsearch"
+      },
+      "count": 12543
+    },
+    "test_accounts": {
+      "available": true
+    }
+  },
+  "settings": {
+    "ALLOWED_HOSTS": ["*"],
+    "DEBUG": true,
+    "MAINTENANCE_MODE": false,
+    "REVISION_HASH": "abc123def456",
+    "SITE_URL": "http://localhost:8000",
+    "STATIC_URL": "http://localhost:8000/static/"
+  }
+}
+```
+
+#### Service Checks
+
+The status endpoint actively checks:
+
+**Database**:
+- `available`: Can connect to the database
+- `populated`: Database contains data (ContentType table has records)
+
+**Elasticsearch**:
+- `available`: Can connect to Elasticsearch cluster
+- `health`: Cluster health status from Elasticsearch
+- `populated`: Search index contains documents
+- `count`: Number of documents in the index
+
+**Test Accounts**:
+- `available`: Test user accounts exist with correct passwords (for staging/testing environments)
+
+<Note>
+Functional tests use the status endpoint to verify the environment is correctly configured before running tests.
+</Note>
+
+## Logging Configuration
+
+Kuma uses Python's standard logging module with customizable handlers and levels.
+
+### Log Configuration
+
+Logging is configured in `kuma/settings/common.py:494`:
+
+```python
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'simple': {'format': '%(name)s:%(levelname)s %(message)s'}
+    },
+    'handlers': {
+        'console': {
+            'level': 'DEBUG',
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'django': {'handlers': ['console'], 'level': 'INFO'},
+        'kuma': {'handlers': ['console-simple'], 'level': 'ERROR'},
+        'elasticsearch': {
+            'handlers': ['console-simple'],
+            'level': config('ES_LOG_LEVEL', default='ERROR'),
+        },
+        'elasticsearch.trace': {
+            'handlers': ['console-simple'],
+            'level': config('ES_TRACE_LOG_LEVEL', default='ERROR'),
+        },
+        'urllib3': {'handlers': ['console-simple'], 'level': 'ERROR'},
+    },
+}
+```
+
+### Viewing Logs
+
+#### Development (Docker Compose)
+
+```bash
+# View web container logs
+docker-compose logs web
+
+# Follow logs in real-time
+docker-compose logs -f web
+
+# View worker logs
+docker-compose logs worker
+
+# View all logs
+docker-compose logs -f
+
+# View recent logs (last 100 lines)
+docker-compose logs --tail=100 web
+```
+
+#### Production (Kubernetes)
+
+In production, logs are:
+- Written to stdout/stderr by the application
+- Collected by Kubernetes
+- Aggregated in a centralized logging system
+- Available through kubectl:
+
+```bash
+# View pod logs
+kubectl logs <pod-name>
+
+# Follow logs
+kubectl logs -f <pod-name>
+
+# View previous container logs (after crash)
+kubectl logs --previous <pod-name>
+```
+
+### Configurable Log Levels
+
+#### Elasticsearch Logging
+
+Control Elasticsearch query logging with environment variables:
+
+```bash
+# Error only (default, no logging)
+ES_LOG_LEVEL=ERROR
+
+# Warning: Log HTTP method and path
+ES_LOG_LEVEL=WARNING
+
+# Debug: Log request and response bodies (JSON)
+ES_LOG_LEVEL=DEBUG
+```
+
+#### Elasticsearch Trace Logging
+
+For detailed debugging with curl-formatted requests:
+
+```bash
+# Error only (default, no logging)
+ES_TRACE_LOG_LEVEL=ERROR
+
+# Info: Log pretty-printed curl variant of requests
+ES_TRACE_LOG_LEVEL=INFO
+
+# Debug: Log pretty-printed JSON responses
+ES_TRACE_LOG_LEVEL=DEBUG
+```
+
+<Warning>
+Enabling detailed Elasticsearch logging (DEBUG or INFO levels) generates significant log volume. Use only for debugging and disable in production.
+</Warning>
+
+#### Python Warnings
+
+Python ignores some warnings by default (like `DeprecationWarning`). Enable them with:
+
+```bash
+# Show every warning, every time
+PYTHONWARNINGS=always
+
+# Show every warning, but only first occurrence per line
+PYTHONWARNINGS=default
+```
+
+Add to `.env` file for local development:
+
+```bash
+PYTHONWARNINGS=always
+```
+
+## New Relic Integration
+
+Kuma uses New Relic APM for production monitoring and performance analysis.
+
+### Configuration
+
+New Relic is installed as a production dependency in `pyproject.toml:25`:
+
+```toml
+[tool.poetry.dependencies]
+newrelic = "6.8.1.164"
+```
+
+The agent automatically instruments the application when enabled, collecting:
+- Request/response times
+- Database query performance
+- External service calls
+- Error rates and exceptions
+- Custom metrics and traces
+
+### Deployment Tracking
+
+Kuma tracks deployments in New Relic using the `scripts/record_deployments.py` script:
+
+```bash
+python scripts/record_deployments.py \
+  --app kuma \
+  --from abc123 \
+  --to def456 \
+  --verbose
+```
+
+**Environment Variables**:
+
+```bash
+# New Relic Admin API key
+NEW_RELIC_API_KEY=your-api-key
+
+# Application IDs (space or comma separated)
+NEW_RELIC_APP_IDS=12345678 87654321
+```
+
+**Deployment Markers**:
+
+The script creates deployment markers in New Relic that:
+- Mark the deployment time on performance charts
+- Link to GitHub commit comparisons
+- Help correlate performance changes with deployments
+- Track deployment frequency
+
+From `docs/deploy.rst:228`, staff should:
+> Monitor MDN in New Relic for about an hour after the push, for increased errors or performance changes.
+
+### Monitoring After Deployment
+
+After deploying to production:
+
+<Steps>
+  <Step title="Check error rates">
+    Monitor the New Relic error rate chart for spikes that might indicate issues with the deployment.
+  </Step>
+  
+  <Step title="Review response times">
+    Check that page response times haven't increased significantly.
+  </Step>
+  
+  <Step title="Inspect database queries">
+    Look for slow database queries or increased query volume.
+  </Step>
+  
+  <Step title="Monitor external services">
+    Verify that external service calls (S3, Elasticsearch) are performing normally.
+  </Step>
+  
+  <Step title="Watch for 30-60 minutes">
+    Continue monitoring for at least an hour after deployment to catch any delayed issues.
+  </Step>
+</Steps>
+
+## Sentry Error Tracking
+
+Kuma integrates with Sentry for error tracking and alerting (configured in `kuma/settings/common.py`):
+
+```python
+import sentry_sdk
+from sentry_sdk.integrations.django import DjangoIntegration
+
+# Sentry automatically configures when DSN is set
+```
+
+Errors and exceptions are automatically captured and sent to Sentry, including:
+- Stack traces
+- Request context
+- User information
+- Environment details
+
+## Custom Monitoring
+
+### Database Connection Monitoring
+
+Monitor database connection pool:
+
+```python
+from django.db import connection
+
+# Check connection status
+connection.ensure_connection()
+print(f"Database: {connection.get_connection_params()}")
+```
+
+### Cache Monitoring
+
+Check cache connectivity:
+
+```python
+from django.core.cache import cache
+
+# Test cache
+cache.set('monitoring_test', 'value', 60)
+assert cache.get('monitoring_test') == 'value'
+```
+
+### Celery Monitoring
+
+Monitor Celery workers:
+
+```bash
+# Inside worker container
+celery -A kuma.celery inspect active
+celery -A kuma.celery inspect stats
+```
+
+## Monitoring Checklist
+
+For production deployments:
+
+- [ ] Health check endpoints responding (200/204)
+- [ ] Status endpoint shows all services available
+- [ ] Database queries performing within normal range
+- [ ] Elasticsearch cluster health is green
+- [ ] No error rate spikes in New Relic
+- [ ] Response times within acceptable range
+- [ ] Celery workers processing tasks
+- [ ] No unusual exceptions in Sentry
+- [ ] Log volume is normal
+- [ ] Memory and CPU usage stable
+
+## Alerting
+
+Production monitoring alerts should trigger on:
+
+- Health check failures (sustained 503 responses)
+- Error rate above threshold
+- Response time degradation
+- Database connection failures
+- Elasticsearch cluster not healthy
+- Memory or CPU saturation
+- Disk space low
+
+Alerts are configured in the infrastructure repository and typically notify:
+- #mdn-dev Slack channel
+- On-call staff via PagerDuty
+- Email for non-critical issues

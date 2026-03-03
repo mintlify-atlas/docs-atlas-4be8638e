@@ -1,0 +1,254 @@
+---
+title: Environment Variables
+description: Learn how to configure Kuma using environment variables
+---
+
+Kuma follows the [12-factor app](http://12factor.net/config) methodology and uses environment variables for configuration. This allows you to customize behavior without modifying code.
+
+## Setting Environment Variables
+
+There are several ways to set environment variables in Kuma:
+
+<CodeGroup>
+```bash Export in shell
+export DEBUG=True
+./manage.py runserver
+```
+
+```bash One-time override
+DEBUG=True ./manage.py runserver
+```
+
+```yaml docker-compose.yml
+services:
+  web:
+    environment:
+      - DEBUG=True
+```
+
+```bash .env file
+# Create .env in repository root
+DEBUG=True
+DEBUG_TOOLBAR=True
+```
+</CodeGroup>
+
+<Note>
+  The `.env` file approach is recommended for local development. Copy `.env-dist.dev` to `.env` and customize.
+</Note>
+
+## Core Configuration Variables
+
+### Django Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DEBUG` | `True` | Enable Django debug mode |
+| `ALLOWED_HOSTS` | `*` | Comma-separated list of allowed hosts |
+| `SECRET_KEY` | Auto-generated | Django secret key for cryptographic signing |
+| `CSRF_COOKIE_SECURE` | `False` | Use secure cookies (requires HTTPS) |
+| `SESSION_COOKIE_SECURE` | `False` | Use secure session cookies |
+
+### Database Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_URL` | `postgresql://kuma:kuma@postgres:5432/developer_mozilla_org` | PostgreSQL connection string |
+| `DATABASE_USER` | `kuma` | Database user (can override for maintenance mode) |
+
+The `DATABASE_URL` format:
+```
+postgresql://user:password@host:port/database
+```
+
+### Redis Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CELERY_BROKER_URL` | `redis://redis:6379/0` | Celery message broker |
+| `CELERY_RESULT_BACKEND` | `redis://redis:6379/1` | Celery result backend |
+| `REDIS_CACHE_SERVER` | `redis://redis:6379/3` | Django cache backend |
+| `CELERY_TASK_ALWAYS_EAGER` | `False` | Execute tasks synchronously for testing |
+
+### Worker Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GUNICORN_WORKERS` | `4` | Number of Gunicorn worker processes |
+| `CELERY_WORKERS` | `4` | Number of Celery worker processes |
+
+<Note>
+  Reducing worker counts can significantly decrease resource usage during local development.
+</Note>
+
+## Development-Specific Variables
+
+### Debug Toolbar
+
+```bash
+DEBUG_TOOLBAR=True
+```
+
+Enables the Django Debug Toolbar for troubleshooting. Note that this adds approximately 4 seconds to page load time.
+
+### Python Warnings
+
+```bash
+# Show every warning, every time
+PYTHONWARNINGS=always
+
+# Show every warning, but ignore repeats
+PYTHONWARNINGS=default
+```
+
+By default, Python ignores some warnings including `DeprecationWarning`. Set `PYTHONWARNINGS` to see them.
+
+### Other Development Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PYTHONDONTWRITEBYTECODE` | `1` | Prevent Python from writing .pyc files |
+| `PYTHONUNBUFFERED` | `True` | Disable Python output buffering |
+
+## Site Configuration
+
+### Domain and URLs
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DOMAIN` | `localhost` | Primary domain name |
+| `SITE_URL` | `http://localhost:8000` | Full site URL |
+| `STATIC_URL` | `http://localhost:8000/static/` | URL for static files |
+| `PROTOCOL` | `http://` | Protocol (http:// or https://) |
+| `ATTACHMENT_HOST` | `localhost:8000` | Host for user-uploaded attachments |
+
+### Host Restrictions
+
+```bash
+ENABLE_RESTRICTIONS_BY_HOST=True
+ALLOW_ROBOTS_WEB_DOMAINS=localhost.org:8000
+```
+
+Controls which domains allow search engine indexing.
+
+## Authentication
+
+### Firefox Accounts (FxA)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FXA_TOKEN_ISSUER` | `https://accounts.stage.mozaws.net` | FxA token issuer URL |
+| `FXA_VERIFY_URL` | `https://oauth.stage.mozaws.net/v1/verify` | FxA verification endpoint |
+
+### OpenID Connect (OIDC)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OIDC_RP_CLIENT_ID` | `undefined` | OIDC client ID |
+| `OIDC_RP_CLIENT_SECRET` | `undefined` | OIDC client secret |
+| `ACCOUNT_DEFAULT_HTTP_PROTOCOL` | `http` | Protocol for account URLs |
+
+## External Services
+
+### Elasticsearch
+
+Control Elasticsearch logging levels:
+
+```bash
+# Default - never logs
+ES_LOG_LEVEL=ERROR
+
+# Logs HTTP method and path
+ES_LOG_LEVEL=WARNING
+
+# Logs request/response bodies
+ES_LOG_LEVEL=DEBUG
+
+# Trace logging
+ES_TRACE_LOG_LEVEL=INFO    # Logs curl variant
+ES_TRACE_LOG_LEVEL=DEBUG   # Logs JSON responses
+```
+
+### AWS
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AWS_ACCESS_KEY_ID` | - | AWS access key for S3 |
+| `AWS_SECRET_ACCESS_KEY` | - | AWS secret key |
+
+### Interactive Examples
+
+```bash
+INTERACTIVE_EXAMPLES_BASE=http://localhost:9090
+```
+
+Override the URL for MDN interactive examples during local development.
+
+## Maintenance Mode
+
+Run Kuma in read-only mode:
+
+```bash .env
+MAINTENANCE_MODE=True
+DATABASE_USER=kuma_ro
+```
+
+This blocks all database write operations. Using a read-only database user provides additional safety.
+
+## Other Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REVISION_HASH` | `undefined` | Git commit hash for deployment tracking |
+| `UID` | `1000` | User ID for Docker container processes |
+| `ALLOW_ALL_IFRAMES` | `False` | Allow embedding in iframes |
+
+## Docker Compose Configuration
+
+To customize the Docker Compose setup:
+
+```bash
+COMPOSE_FILE=docker-compose.yml:docker-compose.ssl.yml
+```
+
+This loads multiple compose files, allowing you to layer configurations (e.g., adding SSL support).
+
+## Best Practices
+
+<Steps>
+  <Step title="Use .env for local overrides">
+    Copy `.env-dist.dev` to `.env` and modify values as needed. The `.env` file is gitignored.
+  </Step>
+  
+  <Step title="Never commit secrets">
+    Keep sensitive values like API keys and passwords out of version control.
+  </Step>
+  
+  <Step title="Document custom variables">
+    If you add new environment variables, document them for other developers.
+  </Step>
+  
+  <Step title="Use sensible defaults">
+    The `docker-compose.yml` includes defaults suitable for development.
+  </Step>
+</Steps>
+
+## Example .env File
+
+```bash .env
+# User and worker configuration
+UID=1001
+GUNICORN_WORKERS=2
+CELERY_WORKERS=2
+
+# Enable debugging tools
+DEBUG_TOOLBAR=True
+PYTHONWARNINGS=default
+
+# Site configuration
+DOMAIN=localhost.org
+SITE_URL=http://localhost.org:8000
+
+# Development services
+INTERACTIVE_EXAMPLES_BASE=http://localhost:9090
+```

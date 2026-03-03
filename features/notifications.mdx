@@ -1,0 +1,475 @@
+---
+title: Notifications
+description: Content update notification system that alerts MDN Plus users about changes to documentation pages they watch
+---
+
+The notifications system allows users to watch MDN documentation pages and receive alerts when content is updated or browser compatibility data changes.
+
+## Overview
+
+Users can:
+- Watch specific documentation pages for updates
+- Configure notification preferences (content updates, compatibility changes)
+- Receive notifications when watched pages are modified
+- Mark notifications as read, star important ones, or delete them
+- Set default notification preferences for all watched pages
+
+<Info>
+Free users are limited to watching a fixed number of pages. MDN Plus subscribers can watch unlimited pages.
+</Info>
+
+## Core Models
+
+### Watch
+
+Represents a documentation page that users can watch (kuma/notifications/models.py:47).
+
+```python
+class Watch(models.Model):
+    users = models.ManyToManyField(User, through="UserWatch")
+    title = models.CharField(max_length=2048)
+    url = models.TextField()  # Normalized document URL
+    path = models.CharField(max_length=4096)
+```
+
+A `Watch` object exists for each unique page that at least one user is watching.
+
+### UserWatch
+
+Links users to watched pages with custom preferences (kuma/notifications/models.py:71).
+
+```python
+class UserWatch(CustomBaseModel):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    watch = models.ForeignKey(Watch, on_delete=models.CASCADE)
+    custom = models.BooleanField(default=False)
+    custom_default = models.BooleanField(default=False)
+    content_updates = models.BooleanField(default=True)
+    browser_compatibility = models.JSONField(default=list)  # List of browsers
+```
+
+**Notification Modes**:
+
+<Card title="Watch Modes" icon="bell">
+  - **Major Updates Only**: `custom=False` — Only significant content changes
+  - **Custom Preferences**: `custom=True` — Fine-grained control over notification types
+  - **Use Defaults**: `custom_default=True` — Inherit from DefaultWatch settings
+</Card>
+
+### DefaultWatch
+
+Stores a user's default notification preferences (kuma/notifications/models.py:93).
+
+```python
+class DefaultWatch(CustomBaseModel):
+    user = models.OneToOneField(to=settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    content_updates = models.BooleanField(default=True)
+    browser_compatibility = models.JSONField(default=list)
+```
+
+These defaults are applied when a user watches a page without specifying custom preferences.
+
+### NotificationData
+
+Contains the actual notification message (kuma/notifications/models.py:6).
+
+```python
+class NotificationData(models.Model):
+    title = models.CharField(max_length=256)
+    text = models.CharField(max_length=256)
+    type = models.CharField(
+        max_length=32,
+        choices=(("content", "content"), ("compat", "compat")),
+        default="compat",
+    )
+    page_url = models.TextField()
+    data = models.JSONField(default=dict)  # Additional metadata
+    created = models.DateTimeField(auto_now_add=True)
+```
+
+### Notification
+
+Links users to notification data with user-specific flags (kuma/notifications/models.py:25).
+
+```python
+class Notification(models.Model):
+    notification = models.ForeignKey(NotificationData, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    starred = models.BooleanField(default=False)
+    read = models.BooleanField(default=False)
+    deleted = models.BooleanField(default=False)
+```
+
+This separation allows one `NotificationData` to be sent to multiple users efficiently.
+
+## API Endpoints
+
+Notification and watch APIs are mounted at `/api/v1/plus/notifications/` and `/api/v1/plus/watch/`.
+
+### List Notifications
+
+**Endpoint**: `GET /api/v1/plus/notifications/`
+
+**Query Parameters**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `limit` | integer | Results per page |
+| `offset` | integer | Pagination offset |
+| `starred` | boolean | Filter by starred status |
+| `unread` | boolean | Filter by unread status |
+| `filterType` | string | Filter by type: `content` or `compat` |
+| `q` | string | Search in title and text |
+| `sort` | string | Sort by `title` or `-notification__created` (default) |
+
+**Response**:
+
+```json
+{
+  "items": [
+    {
+      "id": 456,
+      "title": "JavaScript Array updated",
+      "text": "New methods added to Array prototype",
+      "url": "/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array",
+      "created": "2024-03-15T14:20:00Z",
+      "deleted": false,
+      "read": false,
+      "starred": false
+    }
+  ],
+  "count": 15,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+### Notification Actions
+
+**Mark as Read**:
+```
+POST /api/v1/plus/notifications/{id}/mark-as-read/
+POST /api/v1/plus/notifications/all/mark-as-read/
+```
+
+**Toggle Starred**:
+```
+POST /api/v1/plus/notifications/{id}/toggle-starred/
+```
+
+**Batch Star/Unstar**:
+```
+POST /api/v1/plus/notifications/star-ids/
+Body: {"ids": [1, 2, 3]}
+
+POST /api/v1/plus/notifications/unstar-ids/
+Body: {"ids": [1, 2, 3]}
+```
+
+**Delete**:
+```
+POST /api/v1/plus/notifications/{id}/delete/
+POST /api/v1/plus/notifications/delete-ids/
+Body: {"ids": [1, 2, 3]}
+```
+
+**Undo Deletion**:
+```
+POST /api/v1/plus/notifications/{id}/undo-deletion/
+```
+
+### List Watched Pages
+
+**Endpoint**: `GET /api/v1/plus/watch/watching/`
+
+**Query Parameters**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `url` | string | Get watch status for a specific page |
+| `q` | string | Search watched page titles |
+| `limit` | integer | Results per page (default: 20) |
+| `offset` | integer | Pagination offset |
+
+**Response (List)**:
+
+```json
+{
+  "default": {
+    "content": true,
+    "compatibility": ["chrome", "firefox", "safari"]
+  },
+  "items": [
+    {
+      "title": "JavaScript Array",
+      "url": "/en-us/docs/web/javascript/reference/global_objects/array",
+      "path": "/en-us/docs/web/javascript",
+      "status": "custom",
+      "custom": {
+        "content": true,
+        "compatibility": ["chrome", "firefox"]
+      }
+    }
+  ],
+  "csrfmiddlewaretoken": "abc123...",
+  "subscription_limit_reached": false
+}
+```
+
+**Response (Single Page)**:
+
+```json
+{
+  "title": "JavaScript Array",
+  "url": "/en-us/docs/web/javascript/reference/global_objects/array",
+  "path": "/en-us/docs/web/javascript",
+  "status": "major",
+  "csrfmiddlewaretoken": "abc123...",
+  "subscription_limit_reached": false
+}
+```
+
+Returns `"status": "unwatched"` if the page is not being watched.
+
+### Watch/Unwatch Pages
+
+**Endpoint**: `POST /api/v1/plus/watch/watching/`
+
+**Parameters**:
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `url` | string | Yes | Document URL (normalized) |
+| `title` | string | No | Page title |
+| `path` | string | No | Path prefix for hierarchical watching |
+| `unwatch` | boolean | No | If true, unwatches the page |
+| `custom` | object | No | Custom preferences: `{content: bool, compatibility: [browsers]}` |
+| `custom_default` | boolean | No | Use default preferences |
+| `update_custom_default` | boolean | No | Update defaults with these settings |
+
+**Watch Response** (200):
+
+```json
+{
+  "subscription_limit_reached": false,
+  "ok": true
+}
+```
+
+**Limit Reached** (400):
+
+```json
+{
+  "error": "max_subscriptions",
+  "info": {"max_allowed": 10}
+}
+```
+
+**Unwatch Multiple**:
+```
+POST /api/v1/plus/watch/unwatch-many/
+Body: {"unwatch": ["/en-us/docs/web/javascript", "/en-us/docs/web/css"]}
+```
+
+## Watch Management Flow
+
+### Creating a Watch (kuma/api/v1/plus/notifications.py:255)
+
+<Card title="Watch Creation Process" icon="eye">
+  1. **Normalize URL**: Convert to lowercase, standardized format
+  2. **Check Limits**: Verify user hasn't exceeded watch limit
+  3. **Get or Create Watch**: Find existing Watch or create new one
+  4. **Create UserWatch**: Link user to Watch with preferences
+  5. **Update Defaults**: Optionally update DefaultWatch settings
+</Card>
+
+```python
+# Normalize URL
+url = DocumentURL.normalize_uri(url)
+
+# Check subscription limits
+if watched_count >= MAX_NON_SUBSCRIBED["notification"] and not profile.is_subscriber:
+    return 400, {
+        "error": "max_subscriptions",
+        "info": {"max_allowed": MAX_NON_SUBSCRIBED["notification"]}
+    }
+
+# Get or create Watch object
+watch = Watch.objects.get_or_create(url=url, title=title, path=path)[0]
+
+# Create or update UserWatch with preferences
+watched_data = {"custom": data.custom is not None}
+if data.custom:
+    watched_data["content_updates"] = data.custom.content
+    watched_data["browser_compatibility"] = sorted(data.custom.compatibility)
+    watched_data["custom_default"] = bool(data.custom_default)
+
+user.userwatch_set.update_or_create(watch=watch, defaults=watched_data)
+```
+
+### Updating Watch Preferences
+
+Users can change notification preferences without unwatching:
+
+1. **Switch to Major Updates Only**: Set `custom=False`
+2. **Enable Custom Preferences**: Set `custom=True` with specific options
+3. **Use Defaults**: Set `custom=True` and `custom_default=True`
+4. **Update Defaults**: Set `update_custom_default=True` to change DefaultWatch
+
+### Unwatching
+
+Unwatching deletes the `UserWatch` entry:
+
+```python
+if data.unwatch:
+    if watched:
+        watched.delete()
+    return 200, {"subscription_limit_reached": ..., "ok": True}
+```
+
+If no other users are watching the page, the `Watch` object is retained but orphaned.
+
+## Notification Generation
+
+Notifications are created when watched pages are updated.
+
+### Manual Content Notification (kuma/api/v1/plus/notifications.py:408)
+
+Admin endpoint for manually creating content update notifications:
+
+```
+POST /api/v1/plus/admin/update/content/
+Body: {
+  "page": "/en-US/docs/Web/JavaScript",
+  "pr": "https://github.com/mdn/content/pull/12345"
+}
+```
+
+**Process**:
+
+```python
+url = DocumentURL.normalize_uri(body.raw_url)
+changes = [
+    {
+        "event": "content_updated",
+        "page_url": url,
+        "pr_url": body.pr_url,
+    }
+]
+process_changes(changes)
+```
+
+The `process_changes()` function (kuma/notifications/utils.py) handles:
+1. Finding all users watching the page
+2. Checking their notification preferences
+3. Creating `NotificationData` entry
+4. Creating `Notification` entries for each watcher
+
+### Automated Notifications
+
+The system can process bulk changes from GitHub webhooks or CI/CD:
+
+```
+POST /api/v1/plus/admin/update/
+Body: {"filename": "changes.json"}
+```
+
+This fetches a JSON file with multiple change events and processes them in batch.
+
+<Note>
+Automated notifications are typically triggered by GitHub Actions when pull requests are merged to the mdn/content repository.
+</Note>
+
+## Preference Inheritance
+
+### Default Preferences
+
+When a user sets `custom_default=True`:
+
+```python
+try:
+    default_watch = user.defaultwatch
+except DefaultWatch.DoesNotExist:
+    # Create defaults if they don't exist
+    DefaultWatch.objects.create(
+        user=user,
+        content_updates=data.custom.content,
+        browser_compatibility=sorted(data.custom.compatibility)
+    )
+```
+
+### Updating Defaults
+
+With `update_custom_default=True`, the current watch's preferences become the new defaults:
+
+```python
+if data.update_custom_default:
+    for key, value in custom_data.items():
+        setattr(default_watch, key, value)
+    default_watch.save()
+```
+
+This allows users to set preferences once and apply them to all watched pages.
+
+## Browser Compatibility Notifications
+
+Users can subscribe to compatibility updates for specific browsers:
+
+```json
+{
+  "custom": {
+    "content": false,
+    "compatibility": ["chrome", "firefox", "safari"]
+  }
+}
+```
+
+When browser compatibility data changes for a watched page, notifications are sent only to users who:
+1. Have `browser_compatibility` list populated
+2. Have the affected browser in their list
+
+## Subscription Limits
+
+<Info>
+Watch limits are configured separately from bookmark limits in `MAX_NON_SUBSCRIBED`.
+</Info>
+
+### Limit Enforcement
+
+```python
+MAX_NON_SUBSCRIBED = {
+    "collection": 5,       # Bookmarks
+    "notification": 10,    # Watches
+}
+```
+
+Non-subscribers can watch up to the configured limit. Subscribers have unlimited watches.
+
+### Limit Checking
+
+```python
+if not profile.is_subscriber:
+    response["subscription_limit_reached"] = (
+        request.user.userwatch_set.count() >= MAX_NON_SUBSCRIBED["notification"]
+    )
+```
+
+## Related Features
+
+### Integration with Bookmarks
+
+Users often watch pages they've bookmarked. The UI can suggest watching bookmarked pages.
+
+### Cross-Device Sync
+
+Watches and notification read/starred status sync across devices via the user's Mozilla account.
+
+### Email Notifications
+
+Future versions may support email digests of notifications.
+
+## Related Resources
+
+- [Bookmarks Feature](/features/bookmarks)
+- [Document Management](/features/document-management)
+- [User Authentication](/features/user-authentication)

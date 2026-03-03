@@ -1,0 +1,300 @@
+---
+title: Maintenance Mode
+description: Run Kuma in read-only maintenance mode to serve content while performing database maintenance or during failover scenarios.
+---
+
+Maintenance mode is a special configuration that runs Kuma in read-only mode, blocking all database write operations. This allows MDN to continue serving documentation while performing maintenance on the primary database or during datacenter failover scenarios.
+
+## Overview
+
+When maintenance mode is enabled:
+- All pages continue to be served normally
+- Document content can be read
+- All write operations (edits, user registration, etc.) are blocked
+- The application can run with a read-only database user for added safety
+
+## Use Cases
+
+### Database Maintenance
+
+During scheduled database maintenance, the standby environment runs in maintenance mode to serve traffic while the primary database is updated.
+
+### Standby Environment
+
+The standby environment runs in the AWS EU Frankfurt datacenter in continuous maintenance mode. It:
+- Runs the same code as production
+- Uses the same database (replicated)
+- Operates on minimal resources
+- Can be scaled up to handle full traffic if the US West datacenter fails
+
+See `docs/deploy.rst:239` for details on deploying to the standby environment.
+
+## Enabling Maintenance Mode
+
+### Local Development
+
+To enable maintenance mode in your local Docker environment:
+
+<Steps>
+  <Step title="Create read-only database user">
+    First, create a read-only user in the PostgreSQL database:
+    
+    ```bash
+    docker-compose up -d
+    docker-compose exec web bash
+    ```
+    
+    Connect to the database:
+    
+    ```bash
+    # For PostgreSQL
+    psql -h postgres -U kuma developer_mozilla_org
+    ```
+    
+    Create the read-only user (if using MySQL, use the provided script):
+    
+    ```bash
+    # For MySQL (from docs/development.rst:263)
+    mysql -h mysql -u root -p
+    # Password: kuma
+    mysql> source ./scripts/create_read_only_user.sql
+    mysql> quit
+    ```
+  </Step>
+  
+  <Step title="Configure environment variables">
+    Create or edit `.env` in the repository root:
+    
+    ```bash
+    MAINTENANCE_MODE=True
+    DATABASE_USER=kuma_ro
+    ```
+    
+    <Note>
+    Using a read-only database user is optional but recommended. It provides a safety layer and raises exceptions if write operations are attempted.
+    </Note>
+    
+    You can also run maintenance mode with a user that has write privileges:
+    
+    ```bash
+    MAINTENANCE_MODE=True
+    # DATABASE_USER not set, uses default
+    ```
+  </Step>
+  
+  <Step title="Restart Docker services">
+    Apply the configuration:
+    
+    ```bash
+    docker-compose up -d
+    ```
+  </Step>
+  
+  <Step title="Rebuild static assets (if needed)">
+    If the maintenance mode UI requires updated assets:
+    
+    ```bash
+    docker-compose exec web make build-static
+    docker-compose restart web
+    ```
+  </Step>
+</Steps>
+
+### Production Deployment
+
+In production, maintenance mode is enabled through Kubernetes ConfigMaps:
+
+1. Update the ConfigMap with `MAINTENANCE_MODE=True`
+2. Update the database connection to use a read-only user (optional)
+3. Perform a rolling restart of the pods
+
+The standby environment is deployed with maintenance mode permanently enabled.
+
+## How It Works
+
+### Configuration
+
+Maintenance mode is controlled by the `MAINTENANCE_MODE` environment variable, read from `kuma/settings/common.py:32`:
+
+```python
+MAINTENANCE_MODE = config('MAINTENANCE_MODE', default=False, cast=bool)
+```
+
+This setting is exposed in the status endpoint at `/_kuma_status.json`:
+
+```json
+{
+  "settings": {
+    "MAINTENANCE_MODE": true,
+    "REVISION_HASH": "abc123",
+    ...
+  }
+}
+```
+
+### Read-Only Database User
+
+Using a read-only database user provides:
+- **Safety**: Database-level protection against accidental writes
+- **Notification**: Clear exceptions if write operations are attempted
+- **Verification**: Confirms maintenance mode is working correctly
+
+<Warning>
+If a write operation is attempted with a read-only user, an exception will be raised. This is intentional and helps catch code that doesn't respect maintenance mode.
+</Warning>
+
+## Testing Maintenance Mode
+
+### Integration Tests
+
+Kuma includes integration tests for maintenance mode. To run them locally:
+
+<Steps>
+  <Step title="Load sample database">
+    Ensure you have the latest sample database loaded (see documentation on provisioning the database).
+  </Step>
+  
+  <Step title="Render test document">
+    The test document `en-US/docs/User:anonymous:uitest` must be fully rendered:
+    
+    1. Set `.env` for non-maintenance mode:
+       ```bash
+       MAINTENANCE_MODE=False
+       DATABASE_USER=root
+       ```
+    
+    2. Restart services:
+       ```bash
+       docker-compose up -d
+       ```
+    
+    3. Visit http://localhost:8000/en-US/docs/User:anonymous:uitest and do a shift-reload to render all macros
+  </Step>
+  
+  <Step title="Configure for maintenance mode tests">
+    Update `.env`:
+    
+    ```bash
+    DEBUG=False
+    MAINTENANCE_MODE=True
+    DATABASE_USER=kuma_ro
+    ```
+    
+    Rebuild assets for non-debug mode:
+    
+    ```bash
+    docker-compose up -d
+    docker-compose exec web ./manage.py compilejsi18n
+    docker-compose exec web ./manage.py collectstatic
+    docker-compose restart web
+    ```
+  </Step>
+  
+  <Step title="Run tests">
+    ```bash
+    py.test --maintenance-mode -m "not search" tests/functional \
+      --base-url http://localhost:8000 \
+      --driver Chrome \
+      --driver-path /path/to/chromedriver
+    ```
+    
+    <Note>
+    Search tests are excluded because they're not designed to run against the sample database.
+    </Note>
+  </Step>
+</Steps>
+
+## Monitoring Maintenance Mode
+
+### Health Checks
+
+The health check endpoints continue to function in maintenance mode:
+
+- `GET /healthz` - Liveness check (HTTP 204)
+- `GET /readiness` - Readiness check (HTTP 204)
+- `GET /_kuma_status.json` - Detailed status including `MAINTENANCE_MODE` setting
+
+See [Monitoring](/deployment/monitoring) for details on health check endpoints.
+
+### Status Endpoint
+
+Check if maintenance mode is enabled:
+
+```bash
+curl -s http://localhost:8000/_kuma_status.json | jq '.settings.MAINTENANCE_MODE'
+# Output: true or false
+```
+
+The status endpoint also reports:
+- Database availability
+- Elasticsearch health
+- Current revision hash
+- All configuration settings
+
+## Disabling Maintenance Mode
+
+To return to normal operation:
+
+<Steps>
+  <Step title="Update environment configuration">
+    Edit `.env`:
+    
+    ```bash
+    MAINTENANCE_MODE=False
+    DATABASE_USER=kuma  # or remove this line to use default
+    ```
+  </Step>
+  
+  <Step title="Restart services">
+    ```bash
+    docker-compose up -d
+    ```
+  </Step>
+  
+  <Step title="Verify normal operation">
+    Check the status endpoint:
+    
+    ```bash
+    curl -s http://localhost:8000/_kuma_status.json | jq '.settings.MAINTENANCE_MODE'
+    # Should output: false
+    ```
+    
+    Test a write operation (like editing a document) to confirm writes are working.
+  </Step>
+</Steps>
+
+## Production Maintenance Mode Workflow
+
+For MDN staff performing database maintenance:
+
+1. **Announce maintenance window** in #mdn-dev
+2. **Enable maintenance mode** on production or failover to standby
+3. **Perform database maintenance** on the primary database
+4. **Verify database health** after maintenance
+5. **Disable maintenance mode** and return to normal operation
+6. **Monitor** for any issues in New Relic and logs
+
+The standby environment remains in permanent maintenance mode as a hot standby.
+
+## Troubleshooting
+
+### Write Operations Still Occurring
+
+If write operations are still happening:
+- Verify `MAINTENANCE_MODE=True` in the environment
+- Check `/_kuma_status.json` to confirm the setting is active
+- Ensure the application has been restarted after changing the setting
+
+### Database Errors with Read-Only User
+
+If you see database errors:
+- This is expected if code attempts write operations
+- The errors indicate maintenance mode is working correctly
+- Check logs to identify which code is attempting writes
+
+### Testing Timeout Issues
+
+If functional tests timeout:
+- Ensure DEBUG=False (tests check for non-debug error pages)
+- Verify static assets have been collected
+- Confirm the test document has been fully rendered

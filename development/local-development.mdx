@@ -1,0 +1,156 @@
+---
+title: Local Development
+description: Learn how to set up and run Kuma for local development using Docker
+---
+
+Kuma uses Docker for local development. All files are mounted from your host machine at `/app` within the containers, so you can edit files locally and see changes immediately.
+
+## Starting the Development Environment
+
+<Steps>
+  <Step title="Start all containers">
+    Use the make shortcut to start all services:
+    
+    ```bash
+    make up
+    ```
+    
+    This runs `docker-compose up -d` and starts all containers in detached mode.
+  </Step>
+  
+  <Step title="Access the application">
+    Once started, the development instance is available at:
+    
+    ```
+    http://localhost:8000
+    ```
+  </Step>
+</Steps>
+
+## Common Docker Commands
+
+Kuma provides convenient `make` shortcuts for frequently used commands:
+
+<CodeGroup>
+```bash Start containers
+make up
+```
+
+```bash Interactive shell
+make bash
+```
+
+```bash Django shell
+make shell_plus
+```
+</CodeGroup>
+
+### Direct Docker Compose Commands
+
+You can also use `docker-compose` directly for more control:
+
+```bash
+# Start an interactive shell in the web container
+docker-compose exec web bash
+
+# View logs from the web container
+docker-compose logs web
+
+# Continuously view logs from all containers
+docker-compose logs -f
+
+# Force a container to reload
+docker-compose restart web
+
+# Shutdown the containers
+docker-compose stop
+
+# Destroy the containers
+docker-compose rm
+```
+
+<Note>
+  Run all development commands inside the `web` service container after `make bash`.
+</Note>
+
+## Development Workflow
+
+<Steps>
+  <Step title="Start the environment">
+    ```bash
+    make up
+    ```
+  </Step>
+  
+  <Step title="Enter the container">
+    ```bash
+    make bash
+    ```
+  </Step>
+  
+  <Step title="Run Django commands">
+    Inside the container, you can run any Django management command:
+    
+    ```bash
+    ./manage.py migrate
+    ./manage.py createsuperuser
+    ./manage.py runserver_plus 0.0.0.0:8000
+    ```
+  </Step>
+</Steps>
+
+## Customizing the Docker Environment
+
+You can customize container settings using a `docker-compose.override.yml` file. For example, to use Django's development server with the Werkzeug debugger:
+
+```yaml docker-compose.override.yml
+version: "2.1"
+services:
+  web:
+    command: ./manage.py runserver_plus 0.0.0.0:8000
+    stdin_open: true
+    tty: true
+```
+
+Apply the changes:
+
+```bash
+docker-compose up -d
+```
+
+### Using the Debugger
+
+With `runserver_plus`, you can add breakpoints to your code:
+
+```python
+import pdb; pdb.set_trace()
+```
+
+Then attach to the container:
+
+```bash
+docker attach <container_name>
+```
+
+<Note>
+  Find your container name with `docker ps | grep kuma_web`
+</Note>
+
+## Customizing Number of Workers
+
+The default configuration uses 4 Celery workers and 4 Gunicorn workers. To reduce resource usage, create a `.env` file:
+
+```bash .env
+CELERY_WORKERS=2
+GUNICORN_WORKERS=3
+```
+
+Restart the containers to apply:
+
+```bash
+make up
+```
+
+## Coding Conventions
+
+New code is expected to have test coverage. See the [CONTRIBUTING.md](https://github.com/mdn/kuma/blob/main/CONTRIBUTING.md) file for coding style guidelines.

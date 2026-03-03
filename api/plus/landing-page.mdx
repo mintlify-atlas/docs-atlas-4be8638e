@@ -1,0 +1,158 @@
+---
+title: Landing Page Survey API
+description: Survey endpoints for MDN Plus landing pages
+---
+
+The Landing Page Survey API manages surveys displayed on MDN Plus landing pages.
+
+## Authentication
+
+These endpoints do not require authentication (`auth=None`).
+
+## Rate Limiting
+
+All survey endpoints are rate-limited:
+- **Rate:** 100 requests per minute
+- **Key:** User or IP address
+- **Behavior:** Blocked when limit exceeded
+
+## Base Path
+
+```
+/api/v1/plus/landing-page/survey/
+```
+
+## Get Survey
+
+```
+GET /api/v1/plus/landing-page/survey/
+```
+
+Retrieve or create a survey instance.
+
+### Query Parameters
+
+<ParamField query="uuid" type="uuid">
+  UUID of existing survey to retrieve. If omitted, creates a new survey.
+</ParamField>
+
+### Response
+
+<ResponseField name="uuid" type="uuid">
+  Unique identifier for this survey instance
+</ResponseField>
+
+<ResponseField name="csrfmiddlewaretoken" type="string">
+  CSRF token for submitting survey response
+</ResponseField>
+
+### Survey Creation
+
+When creating a new survey (no UUID provided):
+- Captures geographic information from `HTTP_CLOUDFRONT_VIEWER_COUNTRY_NAME` header
+- Creates a new `LandingPageSurvey` record
+- Returns the UUID for subsequent submission
+
+### Example Request (New Survey)
+
+```bash
+curl "https://developer.mozilla.org/api/v1/plus/landing-page/survey/"
+```
+
+### Example Response
+
+```json
+{
+  "uuid": "550e8400-e29b-41d4-a716-446655440000",
+  "csrfmiddlewaretoken": "abc123xyz..."
+}
+```
+
+### Example Request (Retrieve Existing)
+
+```bash
+curl "https://developer.mozilla.org/api/v1/plus/landing-page/survey/?uuid=550e8400-e29b-41d4-a716-446655440000"
+```
+
+## Submit Survey Response
+
+```
+POST /api/v1/plus/landing-page/survey/
+```
+
+Submit a response for an existing survey.
+
+### Request Parameters
+
+<ParamField body="uuid" type="string" required>
+  UUID of the survey (obtained from GET request)
+</ParamField>
+
+<ParamField body="response" type="json" required>
+  Survey response data as JSON. Structure depends on survey questions.
+</ParamField>
+
+### Content Type
+
+`application/x-www-form-urlencoded` or `multipart/form-data`
+
+### Response
+
+<ResponseField name="ok" type="boolean">
+  Always `true` on successful submission
+</ResponseField>
+
+```json
+{
+  "ok": true
+}
+```
+
+HTTP Status: `200 OK`
+
+### Error Response
+
+If the UUID is not found:
+
+HTTP Status: `404 Not Found`
+
+### Example Request
+
+```bash
+curl -X POST "https://developer.mozilla.org/api/v1/plus/landing-page/survey/" \
+  -H "X-CSRFToken: abc123..." \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data 'uuid=550e8400-e29b-41d4-a716-446655440000' \
+  --data 'response={"question1":"answer1","question2":"answer2"}'
+```
+
+## Survey Model
+
+The `LandingPageSurvey` model stores:
+
+- **uuid** - Unique identifier (auto-generated)
+- **geo_information** - Country name from CloudFront header
+- **response** - JSON field containing survey answers
+- **created** - Timestamp of survey creation
+- **updated** - Timestamp of last update (when response submitted)
+
+## Usage Flow
+
+1. **Landing page loads:** Makes GET request to create new survey
+2. **User completes survey:** Frontend collects responses
+3. **User submits:** POST request with UUID and response JSON
+4. **Server updates:** Finds survey by UUID and stores response
+
+## Rate Limit Behavior
+
+When rate limit is exceeded:
+
+```json
+{
+  "error": "Too many requests"
+}
+```
+
+HTTP Status: `429 Too Many Requests`
+
+Clients should implement exponential backoff when encountering rate limits.

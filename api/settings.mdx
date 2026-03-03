@@ -1,0 +1,209 @@
+---
+title: Settings API
+description: User account and profile settings endpoints
+---
+
+The Settings API manages user account settings and provides user information.
+
+## Authentication
+
+All settings endpoints (except `/whoami`) require `profile_auth` authentication.
+
+## Get Current User Info
+
+```
+GET /api/v1/whoami
+```
+
+**Authentication:** None (returns different data based on authentication status)
+
+Returns information about the current user or anonymous visitor.
+
+### Response (Authenticated)
+
+<ResponseField name="username" type="string">
+  User's username
+</ResponseField>
+
+<ResponseField name="is_authenticated" type="boolean">
+  Always `true` for authenticated users
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  User's email address
+</ResponseField>
+
+<ResponseField name="is_staff" type="boolean" optional>
+  Whether user is staff (only included if true)
+</ResponseField>
+
+<ResponseField name="is_superuser" type="boolean" optional>
+  Whether user is superuser (only included if true)
+</ResponseField>
+
+<ResponseField name="avatar_url" type="string" optional>
+  URL to user's avatar image
+</ResponseField>
+
+<ResponseField name="is_subscriber" type="boolean" optional>
+  Whether user is an MDN Plus subscriber
+</ResponseField>
+
+<ResponseField name="subscription_type" type="string" optional>
+  Type of subscription (if applicable)
+</ResponseField>
+
+<ResponseField name="geo" type="object" optional>
+  Geographic information
+  
+  <ResponseField name="country" type="string">
+    Country name from CloudFront header
+  </ResponseField>
+</ResponseField>
+
+### Response (Anonymous)
+
+<ResponseField name="geo" type="object" optional>
+  Geographic information (if available)
+  
+  <ResponseField name="country" type="string">
+    Country name
+  </ResponseField>
+</ResponseField>
+
+### Example Response
+
+```json
+{
+  "username": "developer123",
+  "is_authenticated": true,
+  "email": "developer@example.com",
+  "avatar_url": "https://avatars.example.com/user.jpg",
+  "is_subscriber": true,
+  "subscription_type": "core",
+  "geo": {
+    "country": "United States"
+  }
+}
+```
+
+## Get Account Settings
+
+```
+GET /api/v1/settings/
+```
+
+**Authentication:** Required (`profile_auth`)
+
+Retrieve current user's account settings.
+
+### Response
+
+<ResponseField name="csrfmiddlewaretoken" type="string">
+  CSRF token for subsequent POST requests
+</ResponseField>
+
+<ResponseField name="locale" type="string" optional>
+  User's preferred locale (null if not set)
+</ResponseField>
+
+### Example Response
+
+```json
+{
+  "csrfmiddlewaretoken": "abc123xyz...",
+  "locale": "en-US"
+}
+```
+
+## Update Account Settings
+
+```
+POST /api/v1/settings/
+```
+
+**Authentication:** Required (`profile_auth`)
+
+**Content-Type:** `application/x-www-form-urlencoded` or `multipart/form-data`
+
+Update user account settings.
+
+### Request Parameters
+
+<ParamField body="locale" type="string">
+  Preferred locale code (e.g., "en-US", "fr", "de")
+</ParamField>
+
+### Response (Success)
+
+<ResponseField name="ok" type="boolean">
+  Always `true` on success
+</ResponseField>
+
+```json
+{
+  "ok": true
+}
+```
+
+HTTP Status: `200 OK`
+
+**Note:** If locale is updated, the response includes a `Set-Cookie` header for the language cookie.
+
+### Response (Validation Error)
+
+<ResponseField name="ok" type="boolean">
+  Always `false` on error
+</ResponseField>
+
+<ResponseField name="errors" type="object">
+  Field-level validation errors
+</ResponseField>
+
+```json
+{
+  "ok": false,
+  "errors": {
+    "locale": [
+      {
+        "message": "Invalid locale code",
+        "code": "invalid"
+      }
+    ]
+  }
+}
+```
+
+HTTP Status: `400 Bad Request`
+
+## Delete User Account
+
+```
+DELETE /api/v1/settings/
+```
+
+**Authentication:** Required (`profile_auth`)
+
+Permanently delete the authenticated user's account.
+
+### Response
+
+<ResponseField name="deleted" type="boolean">
+  Always `true` on successful deletion
+</ResponseField>
+
+```json
+{
+  "deleted": true
+}
+```
+
+HTTP Status: `200 OK`
+
+### Example Request
+
+```bash
+curl -X DELETE "https://developer.mozilla.org/api/v1/settings/" \
+  -H "X-CSRFToken: abc123..." \
+  --cookie "sessionid=xyz789..."
+```

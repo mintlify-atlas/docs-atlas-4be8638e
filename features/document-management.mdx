@@ -1,0 +1,223 @@
+---
+title: Document Management
+description: How MDN documents are referenced, validated, and managed in the Kuma platform
+---
+
+Kuma manages references to MDN documentation pages through the `DocumentURL` system, which tracks remote Yari documents for features like bookmarks and notifications.
+
+## DocumentURL System
+
+The `DocumentURL` model (kuma/documenturls/models.py:21) stores metadata about MDN documentation pages without duplicating full content.
+
+### Core Attributes
+
+<Card title="DocumentURL Model" icon="file">
+  Lightweight references to remote MDN documents with validation and caching.
+</Card>
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `uri` | CharField(250) | Normalized, lowercase document path (e.g., `/en-us/docs/web/javascript`) |
+| `absolute_url` | URLField | Full URL to the document's `index.json` file |
+| `metadata` | JSONField | Cached document metadata (title, parents, mdn_url) |
+| `invalid` | DateTimeField | Timestamp when the URL became invalid (null if valid) |
+| `created` | DateTimeField | When the reference was first created |
+| `modified` | DateTimeField | Last update timestamp |
+
+### URI Normalization
+
+<Info>
+All document URIs are automatically normalized to lowercase to ensure consistency across the platform.
+</Info>
+
+**Normalization Process** (kuma/documenturls/models.py:46):
+```python
+@classmethod
+def normalize_uri(cls, uri):
+    return uri.lower().strip()
+```
+
+This is enforced at the database level with a `pre_save` signal that guarantees all URIs are lowercase before insertion.
+
+## Document Metadata
+
+When a DocumentURL is created, the system fetches metadata from the remote Yari document's `index.json` endpoint.
+
+### Metadata Structure
+
+Only essential fields are cached to minimize storage:
+
+```json
+{
+  "title": "JavaScript",
+  "mdn_url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript",
+  "parents": [
+    {"uri": "/en-us/docs/web", "title": "Web"},
+    {"uri": "/en-us/docs/web/javascript", "title": "JavaScript"}
+  ]
+}
+```
+
+### Fetching Documents
+
+The `download_url()` helper (kuma/documenturls/models.py:8) includes retry logic:
+
+```python
+retry_options = {
+    "retry_exceptions": (requests.exceptions.Timeout,),
+    "sleeptime": 2,
+    "attempts": 5,
+}
+```
+
+This ensures transient network issues don't prevent document references from being created.
+
+## Document Validation
+
+The `DocumentURLCheck` model (kuma/documenturls/models.py:59) tracks validation status for document URLs.
+
+### Health Checking
+
+<Note>
+Document health checks are performed periodically to identify broken links and invalid references.
+</Note>
+
+**Check Process** (kuma/documenturls/models.py:74):
+```python
+@classmethod
+def check_uri(cls, uri, cleanup_old=False, retry_options=None):
+    document_url = DocumentURL.objects.get(uri=DocumentURL.normalize_uri(uri))
+    response = download_url(document_url.absolute_url, retry_options=retry_options)
+    headers = dict(response.headers)
+    checked = cls.objects.create(
+        document_url=document_url,
+        http_error=response.status_code,
+        headers=headers,
+    )
+    return checked
+```
+
+### Check Results
+
+Each check stores:
+- **http_error**: HTTP status code (200 = valid, 404 = not found, etc.)
+- **headers**: Response headers for debugging
+- **created**: Timestamp of the check
+
+### Invalidation
+
+When a document becomes unavailable:
+1. The check records the error status
+2. The `DocumentURL.invalid` field can be set to mark it as broken
+3. Related features (bookmarks, notifications) can handle invalid documents gracefully
+
+## Document Usage in Features
+
+### Bookmarks
+
+The bookmark system (see [Bookmarks](/features/bookmarks)) creates DocumentURL references when users save pages:
+
+```python
+try:
+    documenturl = DocumentURL.objects.get(uri=DocumentURL.normalize_uri(url))
+except DocumentURL.DoesNotExist:
+    response = download_url(absolute_url)
+    metadata = extract_metadata(response.json()["doc"])
+    documenturl = DocumentURL.objects.create(
+        uri=DocumentURL.normalize_uri(url),
+        absolute_url=absolute_url,
+        metadata=metadata,
+    )
+```
+
+This lazy-loading approach creates document references only when needed.
+
+### Notifications
+
+The notification system (see [Notifications](/features/notifications)) uses DocumentURL paths to match watched pages:
+
+- Users watch specific document URLs
+- Content updates trigger notifications for watchers
+- The `Watch.url` field stores the normalized URI
+
+## Configuration
+
+### Base URL Settings
+
+The system uses configurable base URLs for document fetching:
+
+```python
+# Settings
+BOOKMARKS_BASE_URL = "https://developer.mozilla.org"
+```
+
+This allows the platform to work with different Yari deployments (production, staging, local).
+
+## Document Lifecycle
+
+### Creation Flow
+
+1. **User Action**: User bookmarks a page or watches for updates
+2. **URI Normalization**: Path is lowercased and stripped
+3. **Lookup**: Check if DocumentURL already exists
+4. **Fetch**: If new, download `index.json` from Yari
+5. **Extract**: Pull relevant metadata fields
+6. **Store**: Create DocumentURL record with metadata
+
+### Update Flow
+
+<Info>
+Document metadata is generally not updated after creation unless explicitly refreshed.
+Future versions may implement background refresh jobs.
+</Info>
+
+### Deletion Handling
+
+DocumentURL records are rarely deleted:
+- Instead, mark as `invalid` when a document is removed from MDN
+- Preserve history for bookmarks and notifications
+- Allow "undelete" if the document returns
+
+## Performance Considerations
+
+### Unique Constraints
+
+The `uri` field has a unique constraint, preventing duplicate entries and enabling fast lookups:
+
+```python
+uri = models.CharField(max_length=250, unique=True)
+```
+
+### Metadata Caching
+
+By caching document metadata:
+- Reduces API calls to Yari
+- Enables fast display in bookmarks and notifications
+- Trades slight staleness for performance
+
+### Index Optimization
+
+DocumentURLs are frequently queried by URI, so database indexes on `uri` are critical for performance.
+
+## API Integration
+
+The bookmark and notification APIs (kuma/api/v1/plus/) handle DocumentURL management transparently:
+
+```python
+absolute_url = f"{settings.BOOKMARKS_BASE_URL}{url}/index.json"
+try:
+    documenturl = DocumentURL.objects.get(uri=DocumentURL.normalize_uri(url))
+    assert not documenturl.invalid
+except DocumentURL.DoesNotExist:
+    # Create new DocumentURL with metadata from Yari
+    response = download_url(absolute_url)
+    documenturl = DocumentURL.objects.create(...)
+```
+
+This ensures users never have to think about document management—it's automatic.
+
+## Related Resources
+
+- [Bookmarks Feature](/features/bookmarks)
+- [Notifications Feature](/features/notifications)
+- [Yari Documentation](https://github.com/mdn/yari)

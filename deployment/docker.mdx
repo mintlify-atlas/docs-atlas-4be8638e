@@ -1,0 +1,240 @@
+---
+title: Docker Deployment
+description: Learn how to build and deploy Kuma using Docker containers for local development and production environments.
+---
+
+Kuma is deployed as Docker containers in both development and production environments. This guide covers building Docker images, running containers locally, and understanding the image architecture.
+
+## Docker Images
+
+Kuma uses a two-stage Docker image build process:
+
+### Base Image (`kuma_base`)
+
+The base image contains the Python runtime and all dependencies. It's built from `docker/images/kuma_base/Dockerfile`:
+
+```dockerfile
+FROM python:3.10.1-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    WEB_CONCURRENCY=4
+```
+
+Key features:
+- Python 3.10 runtime
+- Non-privileged `kuma` user (UID 1000)
+- Poetry for dependency management
+- All dependencies installed from `pyproject.toml` and `poetry.lock`
+
+### Application Image (`kuma`)
+
+The application image extends the base image and includes the application code. Built from `docker/images/kuma/Dockerfile`:
+
+```dockerfile
+FROM mdnwebdocs/kuma_base:latest
+
+ARG REVISION_HASH
+ENV REVISION_HASH=$REVISION_HASH \
+    DJANGO_SETTINGS_MODULE=kuma.settings.prod
+
+COPY --chown=kuma:kuma . /app
+```
+
+The build process compiles locales and builds static assets during image creation.
+
+## Building Images
+
+Use the Makefile targets to build images:
+
+<Steps>
+  <Step title="Build base image">
+    ```bash
+    make build-base
+    ```
+    
+    This builds the `kuma_base` image with all Python dependencies. The image is tagged as `mdnwebdocs/kuma_base:VERSION`.
+  </Step>
+  
+  <Step title="Build application image">
+    ```bash
+    make build-kuma
+    ```
+    
+    This builds the `kuma` image with the application code. The `KUMA_REVISION_HASH` environment variable is automatically set from the current git commit.
+  </Step>
+  
+  <Step title="Build both images">
+    ```bash
+    make build
+    ```
+    
+    This is a shortcut to build both the base and application images.
+  </Step>
+</Steps>
+
+### Image Versioning
+
+Images are tagged with:
+- Git tag (for releases): `mdnwebdocs/kuma:v1.2.3`
+- Git commit hash (for development): `mdnwebdocs/kuma:abc1234`
+- `latest` tag for the most recent build
+
+## Docker Compose
+
+The `docker-compose.yml` file defines the complete development environment with all required services.
+
+### Services
+
+#### Web Service
+
+The main Django application running with Gunicorn:
+
+```yaml
+web:
+  command: gunicorn -w ${GUNICORN_WORKERS:-4} --bind 0.0.0.0:8000 \
+    --access-logfile=- --timeout=120 --worker-class=gevent --reload \
+    kuma.wsgi:application
+  ports:
+    - "8000:8000"
+```
+
+<Note>
+The `--reload` flag enables automatic reloading when code changes are detected. This is useful for development but should be disabled in production.
+</Note>
+
+#### Worker Service
+
+Celery workers for background tasks:
+
+```yaml
+worker:
+  command: ./scripts/start-worker
+  depends_on:
+    - postgres
+    - redis
+```
+
+#### Database Service
+
+PostgreSQL 13.3 database:
+
+```yaml
+postgres:
+  image: postgres:13.3
+  environment:
+    - POSTGRES_USER=kuma
+    - POSTGRES_PASSWORD=kuma
+    - POSTGRES_DB=developer_mozilla_org
+```
+
+#### Redis Service
+
+Redis 5.0.6 for caching and Celery message broker:
+
+```yaml
+redis:
+  image: redis:5.0.6
+```
+
+<Warning>
+The Redis version should match the production `redis_engine_version` variable in the infrastructure Terraform configuration.
+</Warning>
+
+## Running Locally
+
+### Starting Services
+
+```bash
+# Start all services in detached mode
+make up
+# or
+docker-compose up -d
+```
+
+### Accessing Services
+
+- Web application: http://localhost:8000
+- Web container shell: `make bash` or `docker-compose exec web bash`
+- Django shell: `make shell_plus` or `docker-compose exec web ./manage.py shell_plus`
+
+### Viewing Logs
+
+```bash
+# View logs from web container
+docker-compose logs web
+
+# View logs from all containers
+docker-compose logs -f
+
+# View logs from worker
+docker-compose logs worker
+```
+
+### Stopping Services
+
+```bash
+# Stop all services
+docker-compose stop
+
+# Stop and remove containers
+docker-compose down
+
+# Stop, remove containers, and remove volumes
+docker-compose down -v
+```
+
+## Customizing Workers
+
+The number of Gunicorn and Celery workers can be customized using environment variables in a `.env` file:
+
+```bash
+# .env file
+CELERY_WORKERS=2
+GUNICORN_WORKERS=3
+```
+
+The default configuration uses 4 workers for each service, which can be resource-intensive for local development.
+
+## Publishing Images
+
+For MDN staff deploying to production:
+
+<Steps>
+  <Step title="Push images to Docker Hub">
+    ```bash
+    make push
+    ```
+    
+    This pushes both `kuma_base` and `kuma` images to Docker Hub.
+  </Step>
+  
+  <Step title="Tag and push latest">
+    ```bash
+    make push-latest
+    ```
+    
+    This tags the current images as `latest` and pushes them to Docker Hub.
+  </Step>
+</Steps>
+
+<Note>
+Publishing images requires Docker Hub credentials with write access to the `mdnwebdocs` organization.
+</Note>
+
+## Production Deployment
+
+In production, Kuma runs on Amazon Web Services (AWS) in US West (Oregon):
+
+- **Platform**: Kubernetes managed containers
+- **Image registry**: Docker Hub (`mdnwebdocs/kuma`)
+- **Infrastructure**: Defined in the [mdn/infra repository](https://github.com/mdn/infra)
+- **Build system**: Jenkins CI/CD pipeline
+
+Images are built automatically by Jenkins when code is pushed to tracked branches:
+- `master` branch builds are pushed to Docker Hub
+- Images are tagged with the git commit hash
+- Kubernetes pulls the specified image version for deployment
+
+See the [deployment process documentation](/deployment/configuration) for details on deploying to staging and production environments.

@@ -1,0 +1,442 @@
+---
+title: Docker setup
+description: Detailed guide to Docker configuration, environment variables, and container management for Kuma
+---
+
+Kuma uses Docker Compose to orchestrate multiple containers for local development. This guide covers Docker configuration, environment variables, and container management.
+
+## Container architecture
+
+Kuma's Docker setup includes the following services:
+
+- **web** - The main Django application served by Gunicorn
+- **worker** - Celery workers for background tasks
+- **postgres** - PostgreSQL 13.3 database
+- **redis** - Redis 5.0.6 for caching and Celery message broker
+- **testing** - Container for running tests
+
+## Environment variables
+
+Kuma uses environment variables to configure different components. The `.env` file in the repository root is the primary way to set these variables.
+
+### Creating your .env file
+
+Copy the template to get started:
+
+```bash
+cp .env-dist.dev .env
+```
+
+### Key environment variables
+
+#### User and permissions
+
+```bash
+# Linux users should set this to avoid permission issues
+UID=1000
+```
+
+#### Django settings
+
+```bash
+# Enable debug mode (default: True)
+DEBUG=True
+
+# Django Debug Toolbar (adds ~4 seconds to page load)
+DEBUG_TOOLBAR=False
+
+# CSRF cookie security
+CSRF_COOKIE_SECURE=False
+```
+
+#### Database configuration
+
+The database connection is defined by `DATABASE_URL`:
+
+```bash
+DATABASE_URL=postgresql://kuma:kuma@postgres:5432/developer_mozilla_org
+```
+
+Format: `postgresql://user:password@host:port/database`
+
+#### Worker configuration
+
+```bash
+# Number of Celery workers (default: 4)
+CELERY_WORKERS=2
+
+# Number of Gunicorn workers (default: 4)
+GUNICORN_WORKERS=3
+```
+
+Reducing worker counts can decrease resource usage on development machines.
+
+#### Site configuration
+
+```bash
+# Domain and site URL
+DOMAIN=localhost.org
+SITE_URL=http://localhost.org:8000
+STATIC_URL=http://localhost.org:8000/static/
+
+# Attachment host
+ATTACHMENT_HOST=demos:8000
+```
+
+#### Redis configuration
+
+```bash
+CELERY_BROKER_URL=redis://redis:6379/0
+CELERY_RESULT_BACKEND=redis://redis:6379/1
+REDIS_CACHE_SERVER=redis://redis:6379/3
+```
+
+#### Python configuration
+
+```bash
+# Show deprecation warnings
+PYTHONWARNINGS=default  # or 'always'
+
+# Prevent .pyc file creation
+PYTHONDONTWRITEBYTECODE=1
+
+# Unbuffered output
+PYTHONUNBUFFERED=True
+```
+
+#### Maintenance mode
+
+```bash
+MAINTENANCE_MODE=True
+DATABASE_USER=kuma_ro  # Read-only user
+```
+
+See the [Maintenance mode](#maintenance-mode) section below.
+
+#### OAuth configuration
+
+```bash
+OIDC_RP_CLIENT_ID=your_client_id
+OIDC_RP_CLIENT_SECRET=your_client_secret
+```
+
+## Container management
+
+### Starting containers
+
+Start all containers in the background:
+
+```bash
+docker-compose up -d
+```
+
+Or use the make shortcut:
+
+```bash
+make up
+```
+
+### Stopping containers
+
+Stop all running containers:
+
+```bash
+docker-compose stop
+```
+
+### Restarting containers
+
+Restart specific services:
+
+```bash
+docker-compose restart web worker
+```
+
+After changing `.env` or `/etc/hosts`, restart containers:
+
+```bash
+docker-compose stop
+docker-compose up -d
+```
+
+### Removing containers
+
+Destroy all containers:
+
+```bash
+docker-compose rm
+```
+
+### Accessing containers
+
+Open an interactive shell in the web container:
+
+```bash
+docker-compose exec web bash
+```
+
+Or use the make shortcut:
+
+```bash
+make bash
+```
+
+Run a one-off command:
+
+```bash
+docker-compose exec web ./manage.py migrate
+```
+
+### Viewing logs
+
+View logs from a specific container:
+
+```bash
+docker-compose logs web
+```
+
+Continuously view logs from all containers:
+
+```bash
+docker-compose logs -f
+```
+
+## Advanced configuration
+
+### Customizing docker-compose.yml
+
+You can override container settings using a `docker-compose.override.yml` file. This is useful for debugging or development-specific configurations.
+
+#### Example: Using Django runserver_plus
+
+Create `docker-compose.override.yml`:
+
+```yaml
+version: "2.1"
+services:
+  web:
+    command: ./manage.py runserver_plus 0.0.0.0:8000
+    stdin_open: true
+    tty: true
+```
+
+This runs a single-threaded development server with the Werkzeug debugger enabled.
+
+Apply the override:
+
+```bash
+docker-compose up -d
+```
+
+#### Debugging with pdb
+
+With the runserver_plus configuration above:
+
+<Steps>
+  <Step title="Add a breakpoint">
+    Add `import pdb; pdb.set_trace()` to your code
+  </Step>
+
+  <Step title="Attach to the container">
+    ```bash
+    docker attach <container_name>
+    ```
+    Find your container name with:
+    ```bash
+    docker ps | grep kuma_web
+    ```
+  </Step>
+</Steps>
+
+### Volume mounting
+
+Your local directory is mounted at `/app` in the web and worker containers:
+
+```yaml
+volumes:
+  - ./:/app:z
+```
+
+Changes to local files are immediately reflected in running containers.
+
+## Database management
+
+### Running migrations
+
+Apply database migrations:
+
+```bash
+docker-compose exec web ./manage.py migrate
+```
+
+### Accessing the database
+
+Connect to the PostgreSQL database:
+
+```bash
+docker-compose exec web ./manage.py dbshell
+```
+
+### Creating a fresh database
+
+If you need to start with an empty database:
+
+```bash
+docker-compose exec web ./manage.py migrate
+```
+
+## Maintenance mode
+
+Maintenance mode runs Kuma in read-only mode, blocking all database write operations.
+
+<Steps>
+  <Step title="Create a read-only database user">
+    ```bash
+    docker-compose up -d
+    docker-compose exec web mysql -h mysql -u root -p
+    # Password: kuma
+    ```
+    Then in the MySQL prompt:
+    ```sql
+    source ./scripts/create_read_only_user.sql
+    quit
+    ```
+  </Step>
+
+  <Step title="Configure .env for maintenance mode">
+    Add these settings to your `.env` file:
+    ```bash
+    MAINTENANCE_MODE=True
+    DATABASE_USER=kuma_ro
+    ```
+    
+    Note: Using a read-only user is optional but provides additional safety. You can run in maintenance mode with write-enabled users; write attempts will still be blocked.
+  </Step>
+
+  <Step title="Restart containers">
+    ```bash
+    docker-compose up -d
+    ```
+  </Step>
+
+  <Step title="Rebuild static assets (if needed)">
+    ```bash
+    docker-compose exec web make build-static
+    docker-compose restart web
+    ```
+  </Step>
+</Steps>
+
+## Resource optimization
+
+### Reducing worker counts
+
+The default configuration starts 4 Celery workers and 4 Gunicorn workers, which can be resource-intensive. Customize in your `.env` file:
+
+```bash
+CELERY_WORKERS=2
+GUNICORN_WORKERS=2
+```
+
+### Container resource limits
+
+You can set resource limits in `docker-compose.override.yml`:
+
+```yaml
+version: "2.1"
+services:
+  web:
+    mem_limit: 1g
+    cpus: 0.5
+```
+
+## Container details
+
+### Web container
+
+- **Image**: `mdnwebdocs/kuma_base`
+- **Command**: `gunicorn -w ${GUNICORN_WORKERS:-4} --bind 0.0.0.0:8000 --access-logfile=- --timeout=120 --worker-class=gevent --reload kuma.wsgi:application`
+- **Ports**: 8000:8000
+- **User**: UID from .env (default 1000)
+
+### Worker container
+
+- **Image**: `mdnwebdocs/kuma_base`
+- **Command**: `./scripts/start-worker`
+- **User**: UID from .env (default 1000)
+
+### Postgres container
+
+- **Image**: `postgres:13.3`
+- **Database**: developer_mozilla_org
+- **User**: kuma
+- **Password**: kuma
+- **Volume**: Persistent data stored in `db` volume
+
+### Redis container
+
+- **Image**: `redis:5.0.6`
+- **Purpose**: Celery broker and caching
+
+## Troubleshooting
+
+### Permission errors (Linux)
+
+Set the `UID` in your `.env` file:
+
+```bash
+UID=1000
+```
+
+Then recreate containers:
+
+```bash
+docker-compose stop
+docker-compose up -d
+```
+
+### Port conflicts
+
+If port 8000 is already in use, you can change it in `docker-compose.override.yml`:
+
+```yaml
+version: "2.1"
+services:
+  web:
+    ports:
+      - "8001:8000"
+```
+
+### Containers won't start
+
+Check container logs:
+
+```bash
+docker-compose logs
+```
+
+Check container status:
+
+```bash
+docker-compose ps
+```
+
+### Database connection errors
+
+Ensure the postgres container is running:
+
+```bash
+docker-compose ps postgres
+```
+
+Check DATABASE_URL in your environment:
+
+```bash
+docker-compose exec web env | grep DATABASE_URL
+```
+
+## Further reading
+
+- [Docker Overview](https://docs.docker.com/engine/understanding-docker/)
+- [Docker Compose documentation](https://docs.docker.com/compose/overview/)
+- [Docker for Mac advanced settings](https://docs.docker.com/docker-for-mac/#advanced)

@@ -1,0 +1,218 @@
+---
+title: Search API
+description: Full-text search across MDN Web Docs documentation
+---
+
+The Search API provides full-text search capabilities across MDN documentation using Elasticsearch.
+
+## Endpoint
+
+```
+GET /api/v1/search
+GET /api/v1/search/<locale>
+```
+
+**Authentication:** None (public endpoint)
+
+**CORS:** Enabled via `@allow_CORS_GET` decorator
+
+## Request Parameters
+
+<ParamField query="q" type="string" required>
+  Search query string (max length: configured by `ES_Q_MAXLENGTH` setting)
+</ParamField>
+
+<ParamField query="locale" type="array">
+  Locale codes to search within (e.g., `en-US`, `fr`). Case-insensitive. Defaults to `settings.LANGUAGE_CODE`.
+</ParamField>
+
+<ParamField query="size" type="integer" default="10">
+  Number of results per page (min: 1, max: 100)
+</ParamField>
+
+<ParamField query="page" type="integer" default="1">
+  Page number (min: 1, max: 10)
+</ParamField>
+
+<ParamField query="sort" type="string" default="best">
+  Sort order for results. Options:
+  - `best` - Combined relevance and popularity (default)
+  - `relevance` - Sort by relevance score, then popularity
+  - `popularity` - Sort by popularity, then relevance score
+</ParamField>
+
+<ParamField query="slug_prefix" type="array">
+  Filter results by slug prefix (e.g., `Web/JavaScript`). Multiple prefixes allowed.
+</ParamField>
+
+## Search Algorithm
+
+The search uses a multi-field boosted query with the following priority:
+
+1. **Title match-phrase** (boost: 10.0) - Exact phrase in title
+2. **Title match** (boost: 5.0) - Individual terms in title
+3. **Body match-phrase** (boost: 2.0) - Exact phrase in body
+4. **Body match** (boost: 1.0) - Individual terms in body
+
+For `sort=best`, results are scored using a function_score query that combines relevance with a popularity field value factor.
+
+## Response
+
+<ResponseField name="documents" type="array">
+  Array of search results
+  
+  <ResponseField name="mdn_url" type="string">
+    Full URL to the document on MDN
+  </ResponseField>
+  
+  <ResponseField name="score" type="number">
+    Relevance score for the result
+  </ResponseField>
+  
+  <ResponseField name="title" type="string">
+    Document title
+  </ResponseField>
+  
+  <ResponseField name="locale" type="string">
+    Document locale (e.g., "en-US")
+  </ResponseField>
+  
+  <ResponseField name="slug" type="string">
+    Document slug/path
+  </ResponseField>
+  
+  <ResponseField name="popularity" type="number">
+    Popularity score
+  </ResponseField>
+  
+  <ResponseField name="summary" type="string">
+    Brief document summary
+  </ResponseField>
+  
+  <ResponseField name="highlight" type="object">
+    Search term highlights
+    
+    <ResponseField name="body" type="array">
+      Array of body text fragments with search terms wrapped in `<mark>` tags
+    </ResponseField>
+    
+    <ResponseField name="title" type="array">
+      Array of title fragments with search terms wrapped in `<mark>` tags
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="metadata" type="object">
+  Search metadata
+  
+  <ResponseField name="took_ms" type="integer">
+    Time taken by Elasticsearch query in milliseconds
+  </ResponseField>
+  
+  <ResponseField name="total" type="object">
+    Total results information
+    
+    <ResponseField name="value" type="integer">
+      Number of matching documents
+    </ResponseField>
+    
+    <ResponseField name="relation" type="string">
+      Relation of value to actual total ("eq" or "gte")
+    </ResponseField>
+  </ResponseField>
+  
+  <ResponseField name="size" type="integer">
+    Requested page size
+  </ResponseField>
+  
+  <ResponseField name="page" type="integer">
+    Current page number
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="suggestions" type="array">
+  Alternative search suggestions (empty if none)
+  
+  <ResponseField name="text" type="string">
+    Suggested query text
+  </ResponseField>
+  
+  <ResponseField name="total" type="object">
+    Results available for suggestion
+    
+    <ResponseField name="value" type="integer">
+      Number of results for suggested query
+    </ResponseField>
+    
+    <ResponseField name="relation" type="string">
+      Relation indicator
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+## Example Request
+
+```bash
+curl "https://developer.mozilla.org/api/v1/search?q=javascript+array&locale=en-US&size=5&sort=relevance"
+```
+
+## Example Response
+
+```json
+{
+  "documents": [
+    {
+      "mdn_url": "/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array",
+      "score": 42.5,
+      "title": "Array",
+      "locale": "en-US",
+      "slug": "Web/JavaScript/Reference/Global_Objects/Array",
+      "popularity": 0.95,
+      "summary": "The Array object enables storing a collection of multiple items.",
+      "highlight": {
+        "body": [
+          "The <mark>Array</mark> object in <mark>JavaScript</mark> is used to store multiple values."
+        ],
+        "title": ["<mark>Array</mark>"]
+      }
+    }
+  ],
+  "metadata": {
+    "took_ms": 12,
+    "total": {
+      "value": 158,
+      "relation": "eq"
+    },
+    "size": 5,
+    "page": 1
+  },
+  "suggestions": []
+}
+```
+
+## Caching
+
+Search responses include cache headers:
+
+```
+Cache-Control: public, max-age=43200
+```
+
+Cache duration: 12 hours (`SEARCH_CACHE_CONTROL_MAX_AGE`)
+
+## Error Response
+
+```json
+{
+  "errors": {
+    "q": [
+      {
+        "message": "This field is required.",
+        "code": "required"
+      }
+    ]
+  }
+}
+```
+
+HTTP Status: `400 Bad Request`

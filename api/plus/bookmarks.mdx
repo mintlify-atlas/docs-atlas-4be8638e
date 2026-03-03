@@ -1,0 +1,258 @@
+---
+title: Bookmarks (Collection) API
+description: Manage MDN Plus bookmarks and collections
+---
+
+The Bookmarks API allows MDN Plus users to save and organize documentation pages in their personal collection.
+
+## Authentication
+
+All endpoints require authentication. The API enforces subscription limits:
+- **Free users:** Limited to `MAX_NON_SUBSCRIBED["collection"]` bookmarks
+- **MDN Plus subscribers:** Unlimited bookmarks
+
+## Base Path
+
+```
+/api/v1/plus/collection/
+```
+
+## Get Collection Items
+
+```
+GET /api/v1/plus/collection/
+```
+
+Retrieve bookmarks from the user's collection.
+
+### Query Parameters
+
+<ParamField query="url" type="string">
+  Specific bookmark URL to retrieve. If provided, returns only that bookmark.
+</ParamField>
+
+<ParamField query="q" type="string">
+  Search terms to filter bookmarks by title or notes
+</ParamField>
+
+<ParamField query="sort" type="string">
+  Sort order. Options:
+  - `title` - Sort alphabetically by title
+  - Default: Sort by creation date (newest first)
+</ParamField>
+
+<ParamField query="limit" type="integer" default="20">
+  Number of items to return (must be > 0)
+</ParamField>
+
+<ParamField query="offset" type="integer" default="0">
+  Offset for pagination (must be >= 1)
+</ParamField>
+
+### Response (Single Bookmark)
+
+When `url` parameter is provided:
+
+<ResponseField name="bookmarked" type="object" optional>
+  The bookmark object (null if not bookmarked)
+  
+  <ResponseField name="id" type="integer">
+    Bookmark ID
+  </ResponseField>
+  
+  <ResponseField name="url" type="string">
+    MDN URL of the bookmarked page
+  </ResponseField>
+  
+  <ResponseField name="title" type="string">
+    Document title or custom name
+  </ResponseField>
+  
+  <ResponseField name="notes" type="string">
+    User's notes for this bookmark
+  </ResponseField>
+  
+  <ResponseField name="parents" type="array">
+    Breadcrumb trail of parent pages
+    
+    <ResponseField name="uri" type="string">
+      Parent page URI
+    </ResponseField>
+    
+    <ResponseField name="title" type="string">
+      Parent page title
+    </ResponseField>
+  </ResponseField>
+  
+  <ResponseField name="created" type="datetime">
+    Timestamp when bookmark was created
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="csrfmiddlewaretoken" type="string">
+  CSRF token for POST requests
+</ResponseField>
+
+<ResponseField name="subscription_limit_reached" type="boolean" optional>
+  Whether free user has reached bookmark limit (only for non-subscribers)
+</ResponseField>
+
+### Response (Multiple Bookmarks)
+
+When no `url` parameter is provided:
+
+<ResponseField name="items" type="array">
+  Array of bookmark objects (see structure above)
+</ResponseField>
+
+<ResponseField name="csrfmiddlewaretoken" type="string">
+  CSRF token for POST requests
+</ResponseField>
+
+<ResponseField name="subscription_limit_reached" type="boolean" optional>
+  Whether free user has reached bookmark limit
+</ResponseField>
+
+### Example Request
+
+```bash
+curl "https://developer.mozilla.org/api/v1/plus/collection/?limit=10&sort=title" \
+  --cookie "sessionid=xyz789..."
+```
+
+### Example Response
+
+```json
+{
+  "items": [
+    {
+      "id": 123,
+      "url": "/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array",
+      "title": "Array Reference",
+      "notes": "Important methods to remember",
+      "parents": [
+        {
+          "uri": "/en-US/docs/Web/JavaScript",
+          "title": "JavaScript"
+        },
+        {
+          "uri": "/en-US/docs/Web/JavaScript/Reference",
+          "title": "JavaScript Reference"
+        }
+      ],
+      "created": "2024-03-15T10:30:00Z"
+    }
+  ],
+  "csrfmiddlewaretoken": "abc123...",
+  "subscription_limit_reached": false
+}
+```
+
+## Save or Update Bookmark
+
+```
+POST /api/v1/plus/collection/
+```
+
+Create, update, or delete a bookmark.
+
+### Request Parameters
+
+<ParamField body="url" type="string" required>
+  MDN page URL to bookmark (e.g., "/en-US/docs/Web/JavaScript")
+</ParamField>
+
+<ParamField body="delete" type="boolean">
+  Set to `true` to delete the bookmark
+</ParamField>
+
+<ParamField body="name" type="string">
+  Custom name/title for the bookmark (max 500 characters)
+</ParamField>
+
+<ParamField body="notes" type="string">
+  Personal notes about the bookmark (max 500 characters)
+</ParamField>
+
+### Response (Success)
+
+<ResponseField name="ok" type="boolean">
+  Always `true` on success
+</ResponseField>
+
+<ResponseField name="subscription_limit_reached" type="boolean">
+  Whether the user has reached their bookmark limit
+</ResponseField>
+
+```json
+{
+  "ok": true,
+  "subscription_limit_reached": false
+}
+```
+
+HTTP Status:
+- `200` - Bookmark deleted
+- `201` - Bookmark created or updated
+
+### Response (Limit Reached)
+
+<ResponseField name="ok" type="boolean">
+  Always `false` on error
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error code: "max_subscriptions"
+</ResponseField>
+
+<ResponseField name="info" type="object">
+  Additional error information
+  
+  <ResponseField name="max_allowed" type="integer">
+    Maximum bookmarks allowed for free users
+  </ResponseField>
+</ResponseField>
+
+```json
+{
+  "ok": false,
+  "error": "max_subscriptions",
+  "info": {
+    "max_allowed": 5
+  }
+}
+```
+
+HTTP Status: `400 Bad Request`
+
+### Example Request (Create)
+
+```bash
+curl -X POST "https://developer.mozilla.org/api/v1/plus/collection/" \
+  -H "X-CSRFToken: abc123..." \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --cookie "sessionid=xyz789..." \
+  --data "url=/en-US/docs/Web/JavaScript&name=JS+Docs&notes=Key+reference"
+```
+
+### Example Request (Delete)
+
+```bash
+curl -X POST "https://developer.mozilla.org/api/v1/plus/collection/" \
+  -H "X-CSRFToken: abc123..." \
+  --cookie "sessionid=xyz789..." \
+  --data "url=/en-US/docs/Web/JavaScript&delete=true"
+```
+
+## Document URL Handling
+
+When a bookmark is created for a URL that hasn't been seen before:
+
+1. The system fetches metadata from `{BOOKMARKS_BASE_URL}{url}/index.json`
+2. Creates a `DocumentURL` entry with cached metadata including:
+   - `title` - Document title
+   - `mdn_url` - Canonical MDN URL
+   - `parents` - Breadcrumb hierarchy
+3. Stores the bookmark with reference to this DocumentURL
+
+This allows bookmarks to display accurate titles and navigation even if the user is offline or the source document changes.

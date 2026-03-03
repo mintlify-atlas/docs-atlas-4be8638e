@@ -1,0 +1,160 @@
+---
+title: Database Migrations
+description: Learn how to manage Django database migrations in Kuma
+---
+
+Kuma uses Django's migration system to manage database schema changes. Migrations allow you to evolve your database schema over time while preserving data.
+
+## Running Migrations
+
+To apply all pending migrations to your database:
+
+```bash
+./manage.py migrate
+```
+
+This command:
+- Applies all unapplied migrations in order
+- Updates the `django_migrations` table to track applied migrations
+- Creates tables, adds columns, and makes other schema changes
+
+<Note>
+  Run this command inside the web container after `make bash`.
+</Note>
+
+## Database Configuration
+
+The database connection is defined by the `DATABASE_URL` environment variable:
+
+```bash
+DATABASE_URL=postgresql://kuma:kuma@postgres:5432/developer_mozilla_org
+```
+
+The format follows the [dj-database-url](https://github.com/kennethreitz/dj-database-url) pattern:
+
+```
+DATABASE_URL=postgresql://user:password@host:port/database
+```
+
+## Setting Up a Fresh Database
+
+If you're configuring a new database, create the schema with migrations:
+
+<Steps>
+  <Step title="Configure DATABASE_URL">
+    Override the `DATABASE_URL` environment variable to point to your new database.
+  </Step>
+  
+  <Step title="Run migrations">
+    ```bash
+    ./manage.py migrate
+    ```
+    
+    This creates all necessary tables and schema.
+  </Step>
+</Steps>
+
+## Database Shell Access
+
+To connect to the database specified in `DATABASE_URL`:
+
+```bash
+./manage.py dbshell
+```
+
+This opens an interactive database shell (psql for PostgreSQL).
+
+## Creating Migrations
+
+When you modify Django models, you need to create new migrations:
+
+```bash
+# Create migrations for all apps with changes
+./manage.py makemigrations
+
+# Create migrations for a specific app
+./manage.py makemigrations <app_name>
+```
+
+## Viewing Migrations
+
+### List All Migrations
+
+```bash
+# Show all migrations and their status
+./manage.py showmigrations
+
+# Show migrations for a specific app
+./manage.py showmigrations <app_name>
+```
+
+### View Migration SQL
+
+To see the SQL that a migration will execute:
+
+```bash
+./manage.py sqlmigrate <app_name> <migration_name>
+```
+
+## Common Migration Tasks
+
+<CodeGroup>
+```bash Apply all migrations
+./manage.py migrate
+```
+
+```bash Migrate specific app
+./manage.py migrate <app_name>
+```
+
+```bash Migrate to specific migration
+./manage.py migrate <app_name> <migration_name>
+```
+
+```bash Rollback migrations
+./manage.py migrate <app_name> <previous_migration>
+```
+</CodeGroup>
+
+## Docker Environment
+
+In the Docker development environment, PostgreSQL runs in a separate container:
+
+- **Host**: `postgres`
+- **Port**: `5432`
+- **User**: `kuma`
+- **Password**: `kuma`
+- **Database**: `developer_mozilla_org`
+
+Data is persisted in a Docker volume, so it survives container restarts.
+
+## Migration Best Practices
+
+- **Review generated migrations** before committing them
+- **Test migrations** on a copy of production data when possible
+- **Keep migrations small** and focused on specific changes
+- **Write data migrations carefully** to handle large datasets efficiently
+- **Never edit applied migrations** - create a new migration instead
+
+## Troubleshooting
+
+### Migration Conflicts
+
+If you have conflicting migrations:
+
+```bash
+# Merge migrations
+./manage.py makemigrations --merge
+```
+
+### Fake Migrations
+
+If you need to mark a migration as applied without running it:
+
+```bash
+./manage.py migrate --fake <app_name> <migration_name>
+```
+
+<Note>
+  Use `--fake` with caution - it should only be used when the schema is already in the correct state.
+</Note>

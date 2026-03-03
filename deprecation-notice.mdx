@@ -1,0 +1,195 @@
+---
+title: Deprecation notice
+description: Important information about Kuma's deprecation and the transition to Rumba in July 2022
+---
+
+<Warning>
+  **Kuma is no longer actively maintained.** In July 2022, Kuma was officially superseded by [Rumba](https://github.com/mdn/rumba), a new Django-based backend for MDN Web Docs.
+</Warning>
+
+## What happened
+
+Kuma served as the backend platform for MDN Web Docs for many years, powering one of the web's most important documentation resources. However, in July 2022, Mozilla decided to transition to a new platform called Rumba to better meet the evolving needs of MDN and its community.
+
+### Timeline
+
+- **Pre-July 2022**: Kuma actively developed and deployed for MDN production
+- **July 2022**: Rumba officially replaces Kuma as MDN's backend platform
+- **Present**: Kuma repository maintained for historical reference and legacy instances
+
+## Why the change
+
+The transition from Kuma to Rumba was driven by several factors:
+
+<AccordionGroup>
+  <Accordion title="Architectural simplification">
+    Rumba represents a reimagining of the MDN backend with a focus on simplicity and maintainability. The new architecture reduces complexity while maintaining the essential features needed for MDN's operations.
+  </Accordion>
+  
+  <Accordion title="Modern development practices">
+    Rumba incorporates lessons learned from years of Kuma development, implementing modern best practices and updated dependencies to improve security and developer experience.
+  </Accordion>
+  
+  <Accordion title="Platform evolution">
+    As MDN evolved, particularly with the introduction of Yari (the frontend platform), the requirements for the backend changed. Rumba was designed specifically to complement Yari's architecture.
+  </Accordion>
+</AccordionGroup>
+
+## What this means for users
+
+### For MDN visitors
+
+<Note>
+  End users of MDN Web Docs were not affected by this transition. The documentation site at [developer.mozilla.org](https://developer.mozilla.org) continued to operate without interruption.
+</Note>
+
+The backend platform change was transparent to documentation readers and consumers of MDN content.
+
+### For MDN contributors
+
+Content contribution workflows may have changed with the new platform. Contributors should refer to the current MDN documentation for up-to-date information on how to contribute.
+
+### For API consumers
+
+If you were using Kuma's APIs for:
+- Bookmarks management
+- User notifications
+- Document metadata
+- Authentication flows
+
+You should migrate to Rumba's equivalent APIs. Check the [Rumba repository](https://github.com/mdn/rumba) for current API documentation.
+
+## Legacy Kuma instances
+
+If you're maintaining a legacy Kuma instance, be aware:
+
+<Warning>
+  Security updates and bug fixes are no longer being actively developed for Kuma. Consider migrating to a supported platform or at minimum ensure your dependencies are kept up to date.
+</Warning>
+
+### Recommended actions
+
+1. **Audit your instance**: Understand what features you're using and what data you have
+2. **Plan migration**: Evaluate whether Rumba or another platform meets your needs
+3. **Update dependencies**: If you must continue using Kuma, regularly update Python packages and Docker images
+4. **Monitor security**: Subscribe to security advisories for Django, PostgreSQL, Redis, and other dependencies
+
+## Migration guidance
+
+### Assessing Rumba
+
+Before migrating from Kuma to Rumba, review:
+
+- **Feature parity**: Does Rumba support the features your instance requires?
+- **API compatibility**: Will your integrations work with Rumba's APIs?
+- **Data migration**: What data needs to be transferred and how?
+- **Infrastructure requirements**: Can your infrastructure support Rumba?
+
+### Alternative platforms
+
+If Rumba doesn't meet your needs, consider:
+
+<CardGroup cols={2}>
+  <Card title="Wiki.js" icon="book" href="https://js.wiki/">
+    Modern wiki platform with PostgreSQL support, authentication integrations, and extensive customization options.
+  </Card>
+  
+  <Card title="BookStack" icon="book-open" href="https://www.bookstackapp.com/">
+    Self-hosted documentation platform with hierarchical organization, WYSIWYG editing, and authentication options.
+  </Card>
+  
+  <Card title="Docusaurus" icon="file-lines" href="https://docusaurus.io/">
+    Static site generator for documentation with Markdown support, built by Meta. Best for documentation that doesn't require dynamic wiki features.
+  </Card>
+  
+  <Card title="Custom solution" icon="code">
+    Build a new platform tailored to your specific needs using modern frameworks like Django, FastAPI, or Next.js.
+  </Card>
+</CardGroup>
+
+## Resources
+
+### Kuma resources
+
+- **Source code**: [github.com/mdn/kuma](https://github.com/mdn/kuma)
+- **Documentation**: [kuma.readthedocs.io](https://kuma.readthedocs.io/)
+- **Issue tracker**: [GitHub Issues](https://github.com/mdn/kuma/issues) (historical reference)
+
+### Rumba resources
+
+- **Rumba repository**: [github.com/mdn/rumba](https://github.com/mdn/rumba)
+- **MDN platform docs**: Check Rumba's README for current documentation
+
+### Community support
+
+<Card title="MDN Community" icon="comments" href="https://discourse.mozilla.org/c/mdn">
+  For questions about current MDN platform and contributions, visit the MDN category on Mozilla Discourse.
+</Card>
+
+## Frequently asked questions
+
+<AccordionGroup>
+  <Accordion title="Can I still deploy Kuma for a new project?">
+    While technically possible, **it is not recommended**. Kuma is no longer maintained, meaning no security updates, bug fixes, or new features. Consider using Rumba or another actively maintained platform instead.
+  </Accordion>
+  
+  <Accordion title="Will Kuma's code remain available?">
+    Yes, the Kuma repository on GitHub will remain available for historical reference and for teams maintaining legacy instances. However, no active development is occurring.
+  </Accordion>
+  
+  <Accordion title="What about the documentation on readthedocs?">
+    The Kuma documentation at kuma.readthedocs.io remains available as a historical resource. It reflects the state of Kuma as of the deprecation date.
+  </Accordion>
+  
+  <Accordion title="Is there a migration tool from Kuma to Rumba?">
+    Check the Rumba repository for any migration tools or guidance. The specific migration path depends on your use case and what data you need to preserve.
+  </Accordion>
+  
+  <Accordion title="Can I contribute to Rumba?">
+    Yes! Rumba is an open-source project. Visit the [Rumba repository](https://github.com/mdn/rumba) for contribution guidelines.
+  </Accordion>
+</AccordionGroup>
+
+## Technical details
+
+### What changed architecturally
+
+Rumba differs from Kuma in several key ways:
+
+1. **Simplified app structure**: Fewer Django apps with clearer separation of concerns
+2. **Updated dependencies**: Modern versions of Django, Python, and other core libraries
+3. **Streamlined features**: Focus on essential backend services without legacy wiki features
+4. **Improved API design**: RESTful APIs designed for integration with Yari frontend
+
+### Data considerations
+
+If migrating from Kuma:
+
+- **User accounts**: OAuth integration may require re-authentication
+- **Bookmarks**: May need to be exported and imported
+- **Notifications**: Notification history might not transfer
+- **Attachments**: Files may need to be migrated to new storage
+
+### Deployment differences
+
+Kuma and Rumba have different deployment requirements:
+
+| Aspect | Kuma | Rumba |
+|--------|------|-------|
+| Python version | 3.8+ | Check Rumba docs |
+| Django version | 3.2 LTS | Check Rumba docs |
+| PostgreSQL | 13.3+ | Check Rumba docs |
+| Redis | 5.0.6+ | Check Rumba docs |
+| Elasticsearch | Used for search | Check Rumba docs |
+
+## Getting help
+
+For questions about:
+
+- **Kuma legacy instances**: Use the [GitHub Issues](https://github.com/mdn/kuma/issues) for historical reference or search existing discussions
+- **Rumba and current MDN**: Visit [MDN Discourse](https://discourse.mozilla.org/c/mdn) for community support
+- **Migration planning**: Review Rumba documentation and consider opening a discussion on the Rumba repository
+
+<Info>
+  This documentation is maintained for historical purposes. For current MDN platform information, always refer to the official [MDN Web Docs](https://developer.mozilla.org) and [Rumba repository](https://github.com/mdn/rumba).
+</Info>

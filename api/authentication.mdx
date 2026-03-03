@@ -1,0 +1,112 @@
+---
+title: Authentication
+description: Authentication mechanisms for the Kuma API
+---
+
+The Kuma API supports multiple authentication methods depending on the endpoint type.
+
+## Authentication Methods
+
+### ProfileAuth (Session Authentication)
+
+The primary authentication method for user-facing endpoints.
+
+**Implementation:** `kuma.api.v1.auth.ProfileAuth`
+
+**How it works:**
+- Requires a Django authenticated user session
+- Returns the user's `UserProfile` if it exists
+- If the user doesn't have a profile, returns an unsaved `UserProfile` instance ready for saving
+- The profile is available in `request.auth`
+
+**Usage:**
+```python
+from kuma.api.v1.auth import profile_auth
+
+api = NinjaAPI(auth=profile_auth, csrf=True, version="v1")
+```
+
+**Authentication Flow:**
+1. Checks if `request.user.is_authenticated`
+2. If not authenticated, returns `None` (401 response)
+3. Queries `UserProfile.objects.get(user=user)`
+4. If profile exists, returns it
+5. If profile doesn't exist, returns `UserProfile(user=user)` (unsaved)
+
+### AdminAuth (Bearer Token)
+
+Used for administrative endpoints that require elevated privileges.
+
+**Implementation:** `kuma.api.v1.auth.AdminAuth`
+
+**How it works:**
+- Uses HTTP Bearer token authentication
+- Validates token against `settings.NOTIFICATIONS_ADMIN_TOKEN`
+- No CSRF protection required
+
+**Usage:**
+```python
+from kuma.api.v1.auth import admin_auth
+
+admin_api = NoCacheNinjaAPI(
+    auth=admin_auth, 
+    csrf=False, 
+    version="v1", 
+    urls_namespace="admin_api"
+)
+```
+
+**Request Header:**
+```
+Authorization: Bearer <token>
+```
+
+### SubscriberAuth (Session + Bearer)
+
+Hybrid authentication for MDN Plus subscriber features.
+
+**Implementation:** `kuma.api.v1.auth.SubscriberAuth`
+
+**How it works:**
+1. First checks if user is authenticated via session
+2. If not, checks for `HTTP_AUTHORIZATION` header
+3. Validates OAuth token via `is_authorized_request()`
+4. Creates or updates subscriber user with `KumaOIDCAuthenticationBackend.create_or_update_subscriber()`
+
+**Exception Handling:**
+- Raises `NotASubscriber` exception if authentication fails
+- Can optionally suppress exception with `raise_error=False`
+
+## CSRF Protection
+
+The main API includes CSRF protection:
+
+```python
+api = NoCacheNinjaAPI(auth=profile_auth, csrf=True, version="v1")
+```
+
+Endpoints that modify data require a valid CSRF token. The token can be obtained from:
+- Cookie: `csrftoken`
+- Header: `X-CSRFToken`
+
+Many endpoints include the CSRF token in their response:
+```json
+{
+  "csrfmiddlewaretoken": "abc123..."
+}
+```
+
+## Unauthenticated Endpoints
+
+Some endpoints allow unauthenticated access by setting `auth=None`:
+
+```python
+@api.get("/whoami", auth=None)
+def whoami(request):
+    # Returns user info if authenticated, basic geo info if not
+    pass
+```
+
+Examples:
+- `/api/v1/whoami` - Returns current user info or anonymous data
+- `/api/v1/plus/landing-page/survey/` - Public survey endpoints

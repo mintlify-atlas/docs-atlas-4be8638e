@@ -1,0 +1,175 @@
+---
+title: User Authentication
+description: Mozilla Firefox Accounts (FxA) OIDC integration for user authentication and subscription management in Kuma
+---
+
+Kuma uses Mozilla Firefox Accounts (FxA) with OpenID Connect (OIDC) for user authentication, enabling secure sign-in and MDN Plus subscription management.
+
+## Authentication Backend
+
+The platform extends `mozilla-django-oidc` with a custom authentication backend that handles user creation, profile management, and subscription state.
+
+### Key Features
+
+<Card title="Custom OIDC Backend" icon="lock">
+  The `KumaOIDCAuthenticationBackend` (kuma/users/auth.py:13) extends the standard OIDC backend with:
+  - Refresh token management
+  - Subscription type handling
+  - User profile synchronization
+  - FxA-specific claims processing
+</Card>
+
+### Authentication Flow
+
+1. **Initial Authentication**
+   - User initiates login via OIDC authentication request
+   - Mozilla FxA validates credentials
+   - Callback receives authorization code and exchanges it for tokens
+   - System creates or updates user account
+
+2. **User Creation** (kuma/users/auth.py:60)
+   ```python
+   def create_user(self, claims):
+       user = super().create_user(claims)
+       self._create_or_set_user_profile(user, claims)
+       return user
+   ```
+   - Username is set to the FxA UID (`sub` claim)
+   - Email is extracted from claims
+   - User profile is created with subscription information
+
+3. **Profile Synchronization** (kuma/users/auth.py:76)
+   - Avatar URL from FxA claims
+   - Subscription status from `subscriptions` array
+   - Subscription type (MDN_PLUS_5M, MDN_PLUS_5Y, etc.)
+   - Staff users automatically receive subscriber benefits
+
+## Subscription Management
+
+<Info>
+The system supports multiple MDN Plus subscription tiers: 5M, 5Y, 10M, and 10Y plans, defined in `UserProfile.SubscriptionType`.
+</Info>
+
+### Subscription Detection
+
+The authentication backend checks for MDN Plus subscriptions in the FxA claims:
+
+```python
+profile.is_subscriber = settings.MDN_PLUS_SUBSCRIPTION in claims.get(
+    "subscriptions", []
+)
+```
+
+Staff members automatically receive subscriber status with the highest tier (10Y plan).
+
+## Token Management
+
+### Refresh Tokens
+
+The backend stores refresh tokens for each user, enabling token refresh without re-authentication:
+
+- **Storage**: Encrypted in `UserProfile.fxa_refresh_token` (kuma/users/models.py:22)
+- **Refresh Method**: `KumaOIDCAuthenticationBackend.refresh_access_token()` (kuma/users/auth.py:27)
+- **Usage**: API requests can refresh expired access tokens automatically
+
+### Token Verification
+
+API endpoints verify bearer tokens using `is_authorized_request()` (kuma/users/auth.py:140):
+
+- Validates token format and signature
+- Checks issuer matches FxA
+- Verifies expiration timestamp
+- Returns decoded payload or error
+
+## Account Events & Webhooks
+
+Kuma receives real-time account events from Firefox Accounts via webhooks (kuma/users/views.py:62).
+
+### Supported Event Types
+
+<Note>
+Events are processed asynchronously using Celery tasks to ensure webhook responses remain fast.
+</Note>
+
+| Event Type | Handler | Description |
+|------------|---------|-------------|
+| `password-change` | `process_event_password_change` | User changed their password |
+| `profile-change` | `process_event_profile_change` | Profile information updated |
+| `subscription-state-change` | `process_event_subscription_state_change` | Subscription added/removed |
+| `delete-user` | `process_event_delete_user` | Account deletion requested |
+
+### Webhook Processing Flow
+
+1. **Receive Event** (kuma/users/views.py:169)
+   - Webhook POST request with JWT bearer token
+   - Token signature verified against FxA JWKS endpoint
+   - Issuer validation ensures event is from FxA
+
+2. **Store Event** (kuma/users/views.py:148)
+   - Event saved to `AccountEvent` model with PENDING status
+   - Includes JWT ID, issued timestamp, and event payload
+
+3. **Process Asynchronously**
+   - Celery task enqueued for each event type
+   - Event status updated to PROCESSED or IGNORED
+   - User profile synchronized with latest FxA state
+
+## Authentication Views
+
+### Standard Login
+
+Uses `KumaOIDCAuthenticationCallbackView` which redirects:
+- New non-subscribers → `/en-US/plus` (MDN Plus landing page)
+- Existing users → Their original destination
+
+### Prompt-less Login
+
+The `NoPromptOIDCAuthenticationRequestView` (kuma/users/views.py:28) enables silent authentication:
+
+```python
+def get_extra_params(self, request):
+    params = {"next": "/en-US/plus"}
+    email = request.GET.get("email")
+    if email:
+        params.update(prompt="none", login_hint=email)
+    return params
+```
+
+This is used for seamless re-authentication when the user's session is still valid with FxA.
+
+## Security Considerations
+
+<Card title="Token Security" icon="shield">
+  - Refresh tokens are stored securely in the database
+  - Bearer tokens have expiration timestamps
+  - Webhook events use JWT signatures for verification
+  - All FxA communication uses HTTPS
+</Card>
+
+### Issuer Validation
+
+The system validates that tokens and webhooks come from the configured FxA instance:
+
+```python
+if settings.FXA_TOKEN_ISSUER != issuer:
+    return {"error": "invalid token issuer"}
+```
+
+This prevents token forgery and ensures events are from trusted sources.
+
+## User Profile Model
+
+The `UserProfile` model (kuma/users/models.py:7) extends Django's User with:
+
+- **locale**: Preferred language (6 chars)
+- **avatar**: URL to FxA avatar image
+- **fxa_refresh_token**: Encrypted refresh token (128 chars)
+- **is_subscriber**: Boolean subscription status
+- **subscription_type**: Specific plan tier
+- **created/modified**: Automatic timestamps
+
+## Related Resources
+
+- [mozilla-django-oidc Documentation](https://mozilla-django-oidc.readthedocs.io/)
+- [Firefox Accounts Documentation](https://mozilla.github.io/ecosystem-platform/)
+- [OpenID Connect Specification](https://openid.net/connect/)

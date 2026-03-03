@@ -1,0 +1,80 @@
+---
+title: Contribution Guidelines
+description: Learn how to contribute to the Kuma project, what to work on, and where to get help
+---
+
+Welcome to the Kuma project! This guide will help you get started with contributing to the Django-based system that powered MDN Web Docs.
+
+## Before You Start
+
+<Note>
+All contributors must agree to license their contributions under [MPL 2.0](http://www.mozilla.org/MPL/2.0/) and follow the [Code of Conduct](https://github.com/mdn/kuma/blob/main/CODE_OF_CONDUCT.md).
+</Note>
+
+### Important Guidelines
+
+- **Discuss large changes first** - Use [Discourse](https://discourse.mozilla.org/c/mdn) or create a [GitHub issue](https://github.com/mdn/kuma/issues) before starting work on significant features or refactors
+- **No pull requests for translations** - We don't accept PRs for translated strings (anything under `locale/`). Please use [Pontoon](https://pontoon.mozilla.org/projects/mdn/) instead
+
+## What to Work On
+
+The MDN platform is a mature product, which means there aren't always bugs suitable for new contributors. Here are some ways to find work:
+
+### Finding Good First Issues
+
+We maintain a list of mentored bugs on the [MDN "Getting Involved" page](https://wiki.mozilla.org/Webdev/GetInvolved/developer.mozilla.org#Mentored_Bugs). These are specifically selected to help new contributors get started.
+
+<Tip>
+Look for issues labeled as "good first issue" or "mentored" - these are designed to be approachable for newcomers to the codebase.
+</Tip>
+
+### Other MDN Projects
+
+There are interesting [MDN projects](https://github.com/mdn) outside of writing Python for the platform, though they may be harder to find.
+
+## Where to Ask Questions
+
+If you have questions about what to work on or need help getting started, you can ask:
+
+- **Matrix** - Join the #mdn room on [chat.mozilla.org](https://wiki.mozilla.org/Matrix)
+- **Discourse** - Post in the [MDN Topic](https://discourse.mozilla.org/c/mdn)
+
+Both channels are monitored by MDN staff and experienced contributors who can help guide you.
+
+## How to Submit Code
+
+The MDN development process is similar to [GitHub Flow](https://guides.github.com/introduction/flow/). Follow these steps:
+
+1. **Install the development environment** - Follow the [installation guide](https://kuma.readthedocs.io/en/latest/installation.html)
+2. **Create a branch** - Create a descriptive branch for your bug fix or feature
+3. **Make your changes** - Write code and create one or more commits
+4. **Push to your fork** - Push your branch to your GitHub fork
+5. **Open a pull request** - Create a PR with a clear description
+6. **Fix automated issues** - Address any problems identified by [GitHub Actions](https://github.com/mdn/kuma/actions)
+7. **Address code review feedback** - Work with reviewers to improve your code
+
+<Note>
+MDN staff will review your PR within 1-2 business days, either to provide feedback or to let you know when they plan to review it.
+</Note>
+
+## Experience Levels
+
+We understand that contributors have different experience levels:
+
+- **New contributors** - We don't expect you to know all the conventions. Pull requests won't be rejected just because they don't follow every convention
+- **Intermediate contributors** - Reviewers may ask you to bring your PR up to standards, or may make the changes themselves
+- **Experienced contributors** - You'll be expected to follow conventions and make necessary changes yourself
+
+<Tip>
+As you contribute more, you'll naturally learn the conventions. Don't be discouraged if your first PR requires changes!
+</Tip>
+
+## Code of Conduct
+
+This repository is governed by Mozilla's [Community Participation Guidelines](https://www.mozilla.org/about/governance/policies/participation/). Please read these guidelines carefully.
+
+### Reporting Violations
+
+If you need to report a violation of the Code of Conduct, please follow the instructions in Mozilla's [How to Report](https://www.mozilla.org/en-US/about/governance/policies/participation/reporting/) page.
+
+For additional etiquette tips, see the [Bugzilla Developer Etiquette Guidelines](https://bugzilla.mozilla.org/page.cgi?id=etiquette.html).

@@ -1,0 +1,363 @@
+---
+title: Search
+description: Elasticsearch-powered search functionality for MDN documentation with relevance scoring, highlighting, and suggestions
+---
+
+Kuma implements full-text search across MDN documentation using Elasticsearch, providing fast, relevant search results with highlighting and smart suggestions.
+
+## Architecture
+
+The search system uses Elasticsearch 7.x with the `elasticsearch-dsl` library for query construction and result handling.
+
+<Card title="Search Components" icon="magnifying-glass">
+  - **Index**: Elasticsearch index containing MDN documents
+  - **Query Builder**: Constructs complex relevance queries
+  - **Suggestion Engine**: Provides spelling corrections
+  - **Result Highlighter**: Marks matching terms in context
+</Card>
+
+### Dependencies
+
+From `pyproject.toml`:
+```toml
+elasticsearch = "^7.14.1"
+elasticsearch-dsl = "^7.4.0"
+```
+
+## Search API
+
+The main search endpoint is available at `/api/v1/search` (kuma/api/v1/search/__init__.py:38).
+
+### Request Parameters
+
+<Info>
+All search requests are validated through the `SearchForm` (kuma/api/v1/search/forms.py:26) to ensure parameter correctness.
+</Info>
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `q` | string | Yes | Search query (max length from `ES_Q_MAXLENGTH`) |
+| `locale` | array | No | Locale filters (e.g., `en-US`, `fr`) |
+| `sort` | string | No | Sort order: `best` (default), `relevance`, or `popularity` |
+| `size` | integer | Yes | Results per page (1-100) |
+| `page` | integer | Yes | Page number (1-10) |
+| `slug_prefix` | array | No | Filter by slug prefixes |
+
+### Default Values
+
+```python
+initial = {"size": 10, "page": 1}
+if locale:
+    initial["locale"] = locale
+```
+
+### Example Request
+
+```bash
+GET /api/v1/search?q=javascript+array&locale=en-US&size=10&page=1&sort=best
+```
+
+## Search Query Construction
+
+The search engine uses a sophisticated multi-field query strategy with weighted boosting (kuma/api/v1/search/__init__.py:108).
+
+### Relevance Scoring
+
+<Card title="Query Boost Hierarchy" icon="chart-line">
+  Search relevance is determined by weighted field matches:
+  
+  1. **Title match-phrase**: 10.0 boost
+  2. **Title match**: 5.0 boost
+  3. **Body match-phrase**: 2.0 boost
+  4. **Body match**: 1.0 boost
+</Card>
+
+**Multi-field Query**:
+```python
+sub_queries = []
+sub_queries.append(Q("match", title={"query": params["query"], "boost": 5.0}))
+sub_queries.append(Q("match", body={"query": params["query"], "boost": 1.0}))
+
+if " " in params["query"]:
+    sub_queries.append(
+        Q("match_phrase", title={"query": params["query"], "boost": 10.0})
+    )
+    sub_queries.append(
+        Q("match_phrase", body={"query": params["query"], "boost": 2.0})
+    )
+```
+
+### Phrase Matching
+
+<Note>
+Phrase queries are only used when the search contains spaces, improving single-term search performance.
+</Note>
+
+Phrase matching looks for exact sequences of words, providing much stronger relevance signals than individual word matches.
+
+### Popularity Integration
+
+Search combines textual relevance with document popularity using Elasticsearch's function score:
+
+```python
+search_query = search_query.query(
+    "function_score",
+    query=sub_query,
+    functions=[
+        query.SF(
+            "field_value_factor",
+            field="popularity",
+            factor=popularity_factor,
+            missing=0.0,
+        )
+    ],
+    boost_mode="sum",
+    score_mode="max",
+)
+```
+
+This ensures popular pages like "JavaScript Array" rank higher than obscure pages with similar text matches.
+
+## Sort Options
+
+### Best (Default)
+
+Combines relevance score with popularity using function score with a `popularity_factor` of 10.0.
+
+### Relevance
+
+Primary sort by `_score` (relevance), secondary by `-popularity`:
+
+```python
+if params["sort"] == "relevance":
+    search_query = search_query.sort("_score", "-popularity")
+```
+
+### Popularity
+
+Primary sort by `-popularity`, secondary by `_score`:
+
+```python
+elif params["sort"] == "popularity":
+    search_query = search_query.sort("-popularity", "_score")
+```
+
+## Result Highlighting
+
+Search results include highlighted excerpts showing matched terms in context (kuma/api/v1/search/__init__.py:142).
+
+### Highlight Configuration
+
+```python
+search_query = search_query.highlight_options(
+    pre_tags=["<mark>"],
+    post_tags=["</mark>"],
+    number_of_fragments=3,
+    fragment_size=120,
+    encoder="html",
+)
+search_query = search_query.highlight("title", "body")
+```
+
+### Highlight Output
+
+Each result includes highlighted excerpts:
+
+```json
+{
+  "highlight": {
+    "body": [
+      "The <mark>Array</mark> object enables storing a collection of items",
+      "<mark>JavaScript</mark> <mark>arrays</mark> are zero-indexed"
+    ],
+    "title": ["<mark>Array</mark>"]
+  }
+}
+```
+
+Fragments are HTML-encoded for safe display in web interfaces.
+
+## Search Suggestions
+
+<Info>
+Spelling suggestions are generated using Elasticsearch's term suggester, helping users find results even with typos.
+</Info>
+
+### Suggestion Logic
+
+Suggestions are enabled by default but disabled for:
+- Queries longer than 100 characters
+- Queries with individual words longer than 30 characters
+
+This prevents "Term too complex" errors from Elasticsearch.
+
+### Suggestion Configuration (kuma/api/v1/search/__init__.py:97)
+
+```python
+if make_suggestions:
+    search_query = search_query.suggest(
+        "title_suggestions", params["query"], term={"field": "title"}
+    )
+    search_query = search_query.suggest(
+        "body_suggestions", params["query"], term={"field": "body"}
+    )
+```
+
+### Suggestion Validation
+
+Before returning a suggestion, the system validates it will yield results:
+
+```python
+for score, string in suggestion_strings:
+    if score > min_suggestion_score:
+        total = _find(dict(params, query=string), total_only=True)
+        if total["value"] > 0:
+            suggestions.append({
+                "text": string,
+                "total": {"value": total.value, "relation": total.relation}
+            })
+            break  # Only return the best suggestion
+```
+
+This ensures suggestions are actually helpful.
+
+## Filtering
+
+### Locale Filtering
+
+Restrict results to specific languages:
+
+```python
+if params["locales"]:
+    search_query = search_query.filter("terms", locale=params["locales"])
+```
+
+Locales are stored in lowercase in Elasticsearch for consistency.
+
+### Slug Prefix Filtering
+
+Filter by document path prefixes:
+
+```python
+if params["slug_prefixes"]:
+    sub_queries = [Q("prefix", slug=x) for x in params["slug_prefixes"]]
+    search_query = search_query.query(query.Bool(should=sub_queries))
+```
+
+Useful for restricting searches to specific documentation sections (e.g., `/web/javascript/`).
+
+## Response Format
+
+### Successful Response
+
+```json
+{
+  "documents": [
+    {
+      "mdn_url": "/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array",
+      "score": 12.456,
+      "title": "Array",
+      "locale": "en-us",
+      "slug": "web/javascript/reference/global_objects/array",
+      "popularity": 0.98,
+      "summary": "The Array object enables storing a collection...",
+      "highlight": {
+        "body": ["..."],
+        "title": ["<mark>Array</mark>"]
+      }
+    }
+  ],
+  "metadata": {
+    "took_ms": 23,
+    "total": {
+      "value": 145,
+      "relation": "eq"
+    },
+    "size": 10,
+    "page": 1
+  },
+  "suggestions": [
+    {
+      "text": "array",
+      "total": {"value": 200, "relation": "eq"}
+    }
+  ]
+}
+```
+
+## Retry Logic & Resilience
+
+<Note>
+Search queries include automatic retry logic to handle transient Elasticsearch issues.
+</Note>
+
+### Retry Configuration (kuma/api/v1/search/__init__.py:182)
+
+```python
+retry_options = {
+    "retry_exceptions": (
+        exceptions.ConnectionError,
+        exceptions.NotFoundError,  # Index temporarily missing
+        exceptions.TransportError,
+    ),
+    "sleeptime": settings.ES_RETRY_SLEEPTIME,
+    "attempts": settings.ES_RETRY_ATTEMPTS,
+    "jitter": settings.ES_RETRY_JITTER,
+}
+```
+
+### Retryable Errors
+
+- **ConnectionError**: Elasticsearch temporarily unavailable
+- **NotFoundError**: Index being rebuilt/reindexed
+- **TransportError**: Network or cluster issues
+
+## Caching
+
+Search responses are cached to improve performance and reduce Elasticsearch load.
+
+### Cache Control Headers (kuma/api/v1/search/__init__.py:89)
+
+```python
+patch_cache_control(
+    response,
+    public=True,
+    max_age=SEARCH_CACHE_CONTROL_MAX_AGE  # 12 hours
+)
+```
+
+<Info>
+Both CDN and client browsers cache search results for 12 hours, significantly reducing backend load for popular queries.
+</Info>
+
+### Cache Strategy
+
+- **Public caching**: Results can be shared across users
+- **12-hour TTL**: Balances freshness with performance
+- **CDN storage**: Popular searches served from edge locations
+
+## Configuration Settings
+
+Key configuration options:
+
+```python
+# Index name for Elasticsearch
+SEARCH_INDEX_NAME = "mdn_docs"
+
+# Maximum query length
+ES_Q_MAXLENGTH = 200
+
+# Retry configuration
+ES_RETRY_SLEEPTIME = 1  # seconds between retries
+ES_RETRY_ATTEMPTS = 3
+ES_RETRY_JITTER = 0.5  # random jitter factor
+
+# Cache TTL
+SEARCH_CACHE_CONTROL_MAX_AGE = 60 * 60 * 12  # 12 hours
+```
+
+## Related Resources
+
+- [Elasticsearch DSL Documentation](https://elasticsearch-dsl.readthedocs.io/)
+- [Elasticsearch Function Score Query](https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-function-score-query.html)
+- [Elasticsearch Suggesters](https://www.elastic.co/guide/en/elasticsearch/reference/current/search-suggesters.html)

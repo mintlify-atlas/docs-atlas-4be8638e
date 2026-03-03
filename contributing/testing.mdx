@@ -1,0 +1,241 @@
+---
+title: Testing
+description: Learn how to run tests, write new tests, and use pytest in the Kuma project
+---
+
+Kuma has a comprehensive Python test suite. All changes should include appropriate tests, and all tests must pass before merging.
+
+## Test Requirements
+
+<Warning>
+Tests are required for new functionality, as measured by code coverage tools. All tests must pass before code can be merged.
+</Warning>
+
+### When to Write Tests
+
+- **New functionality** - All new features must include tests
+- **Bug fixes** - Add tests that verify the bug is fixed
+- **Refactoring** - Ensure existing tests still pass
+
+### Code Coverage
+
+We use code coverage tools to ensure tests adequately cover new code. If your changes aren't covered by tests, you'll be asked to add them.
+
+## Running the Test Suite
+
+Commands should be run inside the development environment, after `make bash`.
+
+### Run All Tests
+
+```bash
+make test
+```
+
+The default options for running tests are in `pytest.ini`. This provides a good set of defaults.
+
+### Run Tests Manually
+
+If you need to customize the options:
+
+```bash
+py.test kuma
+```
+
+<Tip>
+It's a good idea to run the tests that apply to your change before opening a pull request. This helps you catch issues early.
+</Tip>
+
+## Running Subsets of Tests
+
+You can run specific subsets of tests in several ways:
+
+### By Marker
+
+Run only tests marked with a specific marker:
+
+```bash
+py.test -m spam
+```
+
+Exclude tests with a marker:
+
+```bash
+py.test -m "not spam"
+```
+
+### By Directory
+
+Run all tests in a directory:
+
+```bash
+py.test kuma/wiki/
+```
+
+Ignore tests in a directory:
+
+```bash
+py.test --ignore kuma/core
+```
+
+### By Name Pattern
+
+Run tests with "foobar" in their names:
+
+```bash
+py.test -k foobar
+```
+
+Exclude tests with "foobar" in their names:
+
+```bash
+py.test -k "not foobar"
+```
+
+### Specific Test
+
+Run a single test:
+
+```bash
+py.test kuma/wiki/tests/test_views.py::RedirectTests::test_redirects_only_internal
+```
+
+See the [pytest documentation](http://pytest.org/latest/usage.html) for more examples.
+
+## Helpful pytest Options
+
+These command line arguments are useful during development:
+
+- `--pdb` - Drop into pdb debugger on test failure
+- `--create-db` - Create a new test database
+- `--showlocals` - Show local variables in tracebacks on errors
+- `--exitfirst` - Exit on the first failure
+
+**Example:**
+
+```bash
+py.test --pdb --exitfirst kuma/wiki/
+```
+
+See `py.test --help` for all available options.
+
+## Test Coverage Reports
+
+### Show Coverage Summary
+
+```bash
+make coveragetest
+```
+
+This shows which parts of the codebase are covered by tests.
+
+### Generate HTML Coverage Report
+
+```bash
+make coveragetesthtml
+```
+
+This creates an HTML report you can open in your browser to see detailed coverage information.
+
+## Writing Tests
+
+### Modern pytest Style (Preferred)
+
+The test suite is being converted to use modern pytest conventions. **We prefer:**
+
+- Test functions (not test classes)
+- pytest fixtures like `root_doc` and `wiki_user`
+- Application and file-local fixtures that customize global fixtures
+- `assert` statements for test assertions
+
+**Example:**
+
+```python
+import pytest
+
+def test_user_creation(wiki_user):
+    """Test that wiki_user fixture creates a valid user."""
+    assert wiki_user.username
+    assert wiki_user.is_active
+```
+
+### Old Style (Avoid)
+
+We are moving away from old-style tests that use:
+
+- Django's `TestCase` testing classes
+- Fixture files
+- General-purpose factory functions like `get_user`, `document`, and `revision`
+
+<Note>
+You may see old-style tests in the codebase, especially in seldom-updated code. When adding new tests, use the modern pytest style.
+</Note>
+
+### Using Markers
+
+View available markers:
+
+```bash
+py.test --markers
+```
+
+Add a marker to a test:
+
+```python
+import pytest
+
+@pytest.mark.spam
+class SpamTests(TestCase):
+    ...
+
+class OtherSpamTests(TestCase):
+    @pytest.mark.spam
+    def test_something(self):
+        ...
+```
+
+To add a new marker, add it to the `pytest.ini` file.
+
+## Test Organization
+
+When adding code to an app, tests should be added in that app's `tests` module. All apps have a `tests` module where tests should go. They will be discovered automatically by the test runner.
+
+### Adding Tests
+
+- Tests should cover new functionality
+- Place tests in the appropriate app's `tests` module
+- Tests are discovered automatically if they look like tests
+
+### Changing Tests
+
+<Warning>
+Unless the current behavior is demonstrably wrong, don't change tests. Tests may be refactored as long as it's clear that the result is the same.
+</Warning>
+
+### Removing Tests
+
+When removing code:
+
+- Remove the tests for that code as well
+- If functionality moves to a new package, move the tests with it
+
+## Test Database
+
+The test suite creates a database named `test_%s` where `%s` is the value from `settings.DATABASES['default']['NAME']`.
+
+<Note>
+Make sure your database user has `ALL` privileges on the test database.
+</Note>
+
+## GitHub Actions
+
+We use [GitHub Actions](https://github.com/mdn/kuma/actions) to automatically run tests and quality checks when a pull request is opened.
+
+<Warning>
+If GitHub Actions identifies problems, we expect them to be fixed before the code review starts.
+</Warning>
+
+## Functional Tests
+
+We have a functional test suite that runs against a running MDN instance. These tests can be challenging to run or alter.
+
+A reviewer can determine if changes are needed to functional tests, and whether they need to be included in your pull request or can be written separately (usually by staff).

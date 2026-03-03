@@ -1,0 +1,201 @@
+---
+title: Managing Dependencies
+description: Learn how to manage Python dependencies in Kuma using Poetry
+---
+
+Kuma uses [Poetry](https://python-poetry.org/) for Python dependency management. Poetry provides deterministic dependency resolution and ensures consistent environments across development and production.
+
+## Overview
+
+Dependency configuration is split across two files:
+
+- **`pyproject.toml`** - Defines dependency constraints and version requirements
+- **`poetry.lock`** - Contains exact versions and hashes of all dependencies
+
+## Updating Dependencies
+
+### Update All Dependencies
+
+Update all dependencies to their latest compatible versions:
+
+```bash
+poetry update
+```
+
+This updates dependencies according to constraints in `pyproject.toml` and regenerates `poetry.lock`.
+
+### Update a Single Dependency
+
+Update only one package to its latest compatible version:
+
+```bash
+poetry update pytz
+```
+
+### Update Beyond Constraints
+
+To update a package beyond the current `pyproject.toml` constraints:
+
+```bash
+poetry update pytz@latest
+```
+
+This updates both `pyproject.toml` and `poetry.lock`.
+
+## Adding Dependencies
+
+### Add a New Package
+
+```bash
+poetry add django~2.2
+```
+
+This:
+- Adds the dependency to `pyproject.toml`
+- Resolves and locks the exact version in `poetry.lock`
+- Installs the package
+
+### Add Latest Version
+
+```bash
+poetry add flake8@latest
+```
+
+### Add Development Dependency
+
+```bash
+poetry add --dev pytest
+```
+
+Development dependencies are listed under `[tool.poetry.dev-dependencies]` in `pyproject.toml`.
+
+## Other Poetry Commands
+
+<CodeGroup>
+```bash Show all dependencies
+poetry show
+```
+
+```bash Show dependency tree
+poetry show --tree
+```
+
+```bash Regenerate lock file
+poetry lock
+```
+
+```bash Install dependencies
+poetry install
+```
+</CodeGroup>
+
+## Key Differences: `update` vs `add`
+
+| Command | Modifies `pyproject.toml` | Modifies `poetry.lock` |
+|---------|---------------------------|------------------------|
+| `poetry update` | No | Yes |
+| `poetry add` | Yes | Yes |
+
+- **`update`** changes the lockfile to use newer versions within existing constraints
+- **`add`** modifies the constraints in `pyproject.toml` and updates the lockfile
+
+## Using Poetry in Docker
+
+You can run Poetry commands inside the Docker container:
+
+```bash
+docker-compose exec web poetry update --dry-run
+```
+
+The `--dry-run` flag shows what would change without making modifications.
+
+### Running on Host Machine
+
+You can also run Poetry directly on your host computer. The resulting `pyproject.toml` and `poetry.lock` files should be identical.
+
+## Current Dependencies
+
+### Production Dependencies
+
+Key production dependencies include:
+
+- **Django** (`^3`) - Web framework
+- **Celery** (`^4.4.7`) - Asynchronous task queue
+- **Gunicorn** (`^20.1.0`) - WSGI HTTP server
+- **Elasticsearch** (`^7.14.1`) - Search engine
+- **PostgreSQL** (`psycopg2-binary ^2.9.1`) - Database adapter
+- **Redis** (`django-redis ^5.0.0`) - Cache backend
+
+### Development Dependencies
+
+Key development dependencies include:
+
+- **pytest** (`~6.2`) - Testing framework
+- **pytest-django** (`~4.5.2`) - Django plugin for pytest
+- **pytest-cov** (`~3.0.0`) - Coverage plugin
+- **black** (`^22.1.0`) - Code formatter
+- **flake8** (`^3.9.2`) - Linter
+- **isort** (`^5.10.1`) - Import sorter
+
+## Managing the Lock File
+
+### After Manual Edits
+
+If you manually edit `pyproject.toml`, regenerate the lock file:
+
+```bash
+poetry lock
+```
+
+### Checking Lock File Status
+
+Verify that `poetry.lock` is up to date:
+
+```bash
+poetry check
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Use version constraints">
+    Specify version constraints in `pyproject.toml` using semantic versioning:
+    
+    - `^2.2` - Compatible with 2.2, allows 2.x (not 3.0)
+    - `~2.2.1` - Compatible with 2.2.1, allows 2.2.x (not 2.3)
+    - `>=1.0,<2.0` - Explicit range
+  </Step>
+  
+  <Step title="Commit both files">
+    Always commit both `pyproject.toml` and `poetry.lock` together.
+  </Step>
+  
+  <Step title="Test dependency updates">
+    After updating dependencies, run the test suite to ensure nothing broke.
+  </Step>
+  
+  <Step title="Review changes">
+    Use `poetry show --outdated` to see which packages have newer versions available.
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+### Dependency Resolution Conflicts
+
+If Poetry cannot resolve dependencies:
+
+1. Check for incompatible version constraints
+2. Try updating incrementally rather than all at once
+3. Review error messages for specific conflicts
+
+### Lock File Issues
+
+If the lock file becomes corrupted:
+
+```bash
+rm poetry.lock
+poetry install
+```
+
+This regenerates the lock file from scratch.

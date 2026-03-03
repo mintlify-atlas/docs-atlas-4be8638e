@@ -1,0 +1,510 @@
+---
+title: Notifications API
+description: Manage MDN Plus notifications for content updates
+---
+
+The Notifications API allows MDN Plus users to receive and manage notifications about documentation updates.
+
+## Authentication
+
+All endpoints require authentication. Non-subscribers are limited to `MAX_NON_SUBSCRIBED["notification"]` watched pages.
+
+## Base Paths
+
+```
+/api/v1/plus/notifications/    # Notification management
+/api/v1/plus/watching/          # Watch management
+```
+
+## Get Notifications
+
+```
+GET /api/v1/plus/notifications/
+```
+
+Retrieve user's notifications with filtering and pagination.
+
+### Query Parameters
+
+<ParamField query="starred" type="boolean">
+  Filter by starred status
+</ParamField>
+
+<ParamField query="unread" type="boolean">
+  Filter by unread status
+</ParamField>
+
+<ParamField query="filterType" type="string">
+  Filter by notification type (e.g., "content", "compatibility")
+</ParamField>
+
+<ParamField query="q" type="string">
+  Search in notification title or text
+</ParamField>
+
+<ParamField query="sort" type="string">
+  Sort order:
+  - `title` - Sort alphabetically by title
+  - Default: Sort by creation date (newest first)
+</ParamField>
+
+<ParamField query="limit" type="integer">
+  Number of items per page
+</ParamField>
+
+<ParamField query="offset" type="integer">
+  Pagination offset
+</ParamField>
+
+### Response
+
+<ResponseField name="items" type="array">
+  Array of notifications
+  
+  <ResponseField name="id" type="integer">
+    Notification ID
+  </ResponseField>
+  
+  <ResponseField name="title" type="string">
+    Notification title
+  </ResponseField>
+  
+  <ResponseField name="text" type="string">
+    Notification content text
+  </ResponseField>
+  
+  <ResponseField name="url" type="string">
+    URL to the relevant page
+  </ResponseField>
+  
+  <ResponseField name="created" type="datetime">
+    When the notification was created
+  </ResponseField>
+  
+  <ResponseField name="deleted" type="boolean">
+    Whether notification is deleted
+  </ResponseField>
+  
+  <ResponseField name="read" type="boolean">
+    Whether notification has been read
+  </ResponseField>
+  
+  <ResponseField name="starred" type="boolean">
+    Whether notification is starred
+  </ResponseField>
+</ResponseField>
+
+### Example Response
+
+```json
+{
+  "items": [
+    {
+      "id": 456,
+      "title": "Array.prototype.map() updated",
+      "text": "Content has been updated with new examples",
+      "url": "/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map",
+      "created": "2024-03-15T14:30:00Z",
+      "deleted": false,
+      "read": false,
+      "starred": true
+    }
+  ]
+}
+```
+
+## Mark Notification as Read
+
+```
+POST /api/v1/plus/notifications/{id}/mark-as-read/
+```
+
+Mark a specific notification as read.
+
+### Response
+
+```json
+{
+  "ok": true
+}
+```
+
+## Mark All as Read
+
+```
+POST /api/v1/plus/notifications/all/mark-as-read/
+```
+
+Mark all unread notifications as read.
+
+### Response
+
+```json
+{
+  "ok": true
+}
+```
+
+## Toggle Starred
+
+```
+POST /api/v1/plus/notifications/{id}/toggle-starred/
+```
+
+Toggle the starred status of a notification.
+
+### Response (Success)
+
+```json
+{
+  "ok": true
+}
+```
+
+HTTP Status: `200 OK`
+
+### Response (Error)
+
+```
+"no matching notification"
+```
+
+HTTP Status: `400 Bad Request`
+
+## Star Multiple Notifications
+
+```
+POST /api/v1/plus/notifications/star-ids/
+```
+
+Star multiple notifications at once.
+
+### Request Body
+
+<ParamField body="ids" type="array" required>
+  Array of notification IDs to star
+</ParamField>
+
+```json
+{
+  "ids": [123, 456, 789]
+}
+```
+
+### Response
+
+```json
+{
+  "ok": true
+}
+```
+
+## Unstar Multiple Notifications
+
+```
+POST /api/v1/plus/notifications/unstar-ids/
+```
+
+Remove star from multiple notifications.
+
+### Request Body
+
+<ParamField body="ids" type="array" required>
+  Array of notification IDs to unstar
+</ParamField>
+
+## Delete Notification
+
+```
+POST /api/v1/plus/notifications/{id}/delete/
+```
+
+Soft-delete a notification (mark as deleted).
+
+### Response
+
+```json
+{
+  "ok": true
+}
+```
+
+## Undo Deletion
+
+```
+POST /api/v1/plus/notifications/{id}/undo-deletion/
+```
+
+Restore a deleted notification.
+
+## Delete Multiple Notifications
+
+```
+POST /api/v1/plus/notifications/delete-ids/
+```
+
+Delete multiple notifications at once.
+
+### Request Body
+
+<ParamField body="ids" type="array" required>
+  Array of notification IDs to delete
+</ParamField>
+
+```json
+{
+  "ids": [123, 456, 789]
+}
+```
+
+## Get Watched Pages
+
+```
+GET /api/v1/plus/watching/
+```
+
+Retrieve list of pages the user is watching.
+
+### Query Parameters
+
+<ParamField query="url" type="string">
+  Filter by specific URL
+</ParamField>
+
+<ParamField query="q" type="string">
+  Search watched pages by title
+</ParamField>
+
+<ParamField query="limit" type="integer" default="20">
+  Number of items to return
+</ParamField>
+
+<ParamField query="offset" type="integer" default="0">
+  Pagination offset
+</ParamField>
+
+### Response
+
+<ResponseField name="items" type="array">
+  Array of watched pages (if no specific URL)
+  
+  <ResponseField name="title" type="string">
+    Page title
+  </ResponseField>
+  
+  <ResponseField name="url" type="string">
+    Page URL
+  </ResponseField>
+  
+  <ResponseField name="path" type="string">
+    Page path
+  </ResponseField>
+  
+  <ResponseField name="status" type="string">
+    Watch level: "major" (major updates only) or "custom" (custom settings)
+  </ResponseField>
+  
+  <ResponseField name="custom" type="string|object">
+    If status is "custom":
+    - "default" - Using default watch settings
+    - Object with custom settings (see UpdateWatchCustom schema)
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="default" type="object" optional>
+  User's default watch settings (if configured)
+  
+  <ResponseField name="content_updates" type="boolean">
+    Watch for content updates
+  </ResponseField>
+  
+  <ResponseField name="browser_compatibility" type="array">
+    Array of browser names to watch for compatibility changes
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="csrfmiddlewaretoken" type="string">
+  CSRF token for POST requests
+</ResponseField>
+
+<ResponseField name="subscription_limit_reached" type="boolean" optional>
+  Whether free user has reached watch limit
+</ResponseField>
+
+### Example Response (List)
+
+```json
+{
+  "items": [
+    {
+      "title": "Array.prototype.map()",
+      "url": "/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map",
+      "path": "Web/JavaScript/Reference/Global_Objects/Array/map",
+      "status": "custom",
+      "custom": {
+        "content_updates": true,
+        "browser_compatibility": ["chrome", "firefox"]
+      }
+    }
+  ],
+  "default": {
+    "content_updates": true,
+    "browser_compatibility": ["chrome", "firefox", "safari"]
+  },
+  "csrfmiddlewaretoken": "abc123...",
+  "subscription_limit_reached": false
+}
+```
+
+### Example Response (Single URL)
+
+When `url` parameter is provided:
+
+```json
+{
+  "title": "Array.prototype.map()",
+  "url": "/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map",
+  "path": "Web/JavaScript/Reference/Global_Objects/Array/map",
+  "status": "major",
+  "csrfmiddlewaretoken": "abc123..."
+}
+```
+
+Or if not watching:
+
+```json
+{
+  "status": "unwatched",
+  "csrfmiddlewaretoken": "abc123..."
+}
+```
+
+## Watch/Unwatch Page
+
+```
+POST /api/v1/plus/watching/
+```
+
+Watch or unwatch a page, or update watch settings.
+
+### Query Parameters
+
+<ParamField query="url" type="string" required>
+  Page URL to watch/unwatch
+</ParamField>
+
+### Request Body
+
+<ParamField body="unwatch" type="boolean">
+  Set to `true` to unwatch the page
+</ParamField>
+
+<ParamField body="title" type="string">
+  Page title (required when watching)
+</ParamField>
+
+<ParamField body="path" type="string">
+  Page path
+</ParamField>
+
+<ParamField body="custom" type="object">
+  Custom notification settings
+  
+  <ParamField body="compatibility" type="array">
+    Array of browser names to watch (e.g., ["chrome", "firefox", "safari"])
+  </ParamField>
+  
+  <ParamField body="content" type="boolean">
+    Watch for content updates
+  </ParamField>
+</ParamField>
+
+<ParamField body="custom_default" type="boolean">
+  Use default watch settings instead of custom
+</ParamField>
+
+<ParamField body="update_custom_default" type="boolean">
+  Update the user's default settings with these custom settings
+</ParamField>
+
+### Response (Success)
+
+<ResponseField name="ok" type="boolean">
+  Always `true` on success
+</ResponseField>
+
+<ResponseField name="subscription_limit_reached" type="boolean">
+  Whether user has reached watch limit
+</ResponseField>
+
+```json
+{
+  "ok": true,
+  "subscription_limit_reached": false
+}
+```
+
+HTTP Status: `200 OK`
+
+### Response (Error)
+
+```json
+{
+  "ok": false,
+  "error": "max_subscriptions",
+  "info": {
+    "max_allowed": 5
+  }
+}
+```
+
+HTTP Status: `400 Bad Request`
+
+### Example Request (Watch with Custom Settings)
+
+```bash
+curl -X POST "https://developer.mozilla.org/api/v1/plus/watching/?url=/en-US/docs/Web/JavaScript" \
+  -H "X-CSRFToken: abc123..." \
+  -H "Content-Type: application/json" \
+  --cookie "sessionid=xyz789..." \
+  --data '{
+    "title": "JavaScript",
+    "path": "Web/JavaScript",
+    "custom": {
+      "compatibility": ["chrome", "firefox"],
+      "content": true
+    }
+  }'
+```
+
+## Unwatch Multiple Pages
+
+```
+POST /api/v1/plus/unwatch-many/
+```
+
+Unwatch multiple pages at once.
+
+### Request Body
+
+<ParamField body="unwatch" type="array" required>
+  Array of page URLs to unwatch
+</ParamField>
+
+```json
+{
+  "unwatch": [
+    "/en-US/docs/Web/JavaScript",
+    "/en-US/docs/Web/CSS"
+  ]
+}
+```
+
+### Response
+
+```json
+{
+  "ok": true,
+  "subscription_limit_reached": false
+}
+```

@@ -1,0 +1,324 @@
+---
+title: Deployment Configuration
+description: Configure Kuma for production deployment with environment variables, database settings, and service integrations.
+---
+
+Kuma uses environment variables for configuration, following the [12-factor app methodology](http://12factor.net/config). This allows the same Docker image to run in different environments (development, staging, production) with different configurations.
+
+## Environment Variables
+
+Configuration is managed through environment variables that can be set in:
+- `.env` file in the repository root (for local development)
+- `docker-compose.yml` environment section
+- Kubernetes ConfigMaps and Secrets (for production)
+- Shell exports
+
+### Core Settings
+
+#### Application Settings
+
+```bash
+# Django debug mode (should be False in production)
+DEBUG=False
+
+# Protocol and domain
+PROTOCOL=https://
+DOMAIN=developer.mozilla.org
+SITE_URL=https://developer.mozilla.org
+
+# Static file URL
+STATIC_URL=https://developer.mozilla.org/static/
+
+# Allowed hosts for Django
+ALLOWED_HOSTS=developer.mozilla.org
+
+# Git revision hash (automatically set during build)
+REVISION_HASH=abc123def456
+```
+
+#### Database Configuration
+
+Kuma uses PostgreSQL as the primary database. The connection is configured with a single URL:
+
+```bash
+# Database URL format: postgresql://user:password@host:port/database
+DATABASE_URL=postgresql://kuma:kuma@postgres:5432/developer_mozilla_org
+
+# Connection pool settings
+CONN_MAX_AGE=60
+```
+
+<Note>
+The `DATABASE_URL` format is parsed by [dj-database-url](https://github.com/kennethreitz/dj-database-url). The URL includes the username, password, host, port, and database name.
+</Note>
+
+#### Redis Configuration
+
+Redis is used for caching and as the Celery message broker:
+
+```bash
+# Redis cache server
+REDIS_CACHE_SERVER=redis://redis:6379/3
+
+# Celery broker and result backend
+CELERY_BROKER_URL=redis://redis:6379/0
+CELERY_RESULT_BACKEND=redis://redis:6379/1
+```
+
+### Security Settings
+
+#### Cookie Security
+
+```bash
+# CSRF protection (should be True in production)
+CSRF_COOKIE_SECURE=True
+
+# Session cookie security (should be True in production)
+SESSION_COOKIE_SECURE=True
+```
+
+<Warning>
+For local development without HTTPS, set these to `False` to avoid CSRF errors. In production with HTTPS, these must be `True`.
+</Warning>
+
+#### Authentication
+
+Kuma uses Mozilla's OpenID Connect (OIDC) for authentication:
+
+```bash
+# OIDC client credentials
+OIDC_RP_CLIENT_ID=your-client-id
+OIDC_RP_CLIENT_SECRET=your-client-secret
+```
+
+### Service Integrations
+
+#### AWS Configuration
+
+For S3 storage of attachments:
+
+```bash
+# AWS credentials
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
+
+# Attachment hosting
+ATTACHMENT_HOST=mdn.mozillademos.org
+ATTACHMENTS_AWS_S3_CUSTOM_DOMAIN=media.prod.mdn.mozit.cloud
+ATTACHMENTS_AWS_S3_SECURE_URLS=True
+```
+
+#### Interactive Examples
+
+```bash
+# Interactive examples service
+INTERACTIVE_EXAMPLES_BASE=https://interactive-examples.mdn.mozilla.net
+```
+
+#### New Relic Monitoring
+
+New Relic APM is configured for production monitoring:
+
+```bash
+# New Relic API credentials (for deployment tracking)
+NEW_RELIC_API_KEY=your-api-key
+NEW_RELIC_APP_IDS=12345678
+```
+
+The `newrelic` package is included in production dependencies (see `pyproject.toml`). New Relic automatically instruments the application when the agent is enabled.
+
+### Celery Configuration
+
+```bash
+# Number of Celery worker processes
+CELERY_WORKERS=4
+
+# Run tasks synchronously (for testing)
+CELERY_TASK_ALWAYS_EAGER=False
+
+# Maximum tasks per worker before restart
+CELERYD_MAX_TASKS_PER_CHILD=500
+```
+
+<Note>
+In production, `CELERY_TASK_ALWAYS_EAGER` should be `False` so tasks run asynchronously. Set it to `True` in tests to run tasks synchronously.
+</Note>
+
+### Gunicorn Configuration
+
+```bash
+# Number of Gunicorn worker processes
+GUNICORN_WORKERS=4
+
+# Worker concurrency (for gevent workers)
+WEB_CONCURRENCY=4
+```
+
+Gunicorn runs with gevent workers for better concurrency:
+
+```bash
+gunicorn -w ${GUNICORN_WORKERS:-4} \
+  --bind 0.0.0.0:8000 \
+  --timeout=120 \
+  --worker-class=gevent \
+  kuma.wsgi:application
+```
+
+### Elasticsearch Configuration
+
+```bash
+# Elasticsearch index prefix
+ES_INDEX_PREFIX=mdnprod
+
+# Use live index (not an alias)
+ES_LIVE_INDEX=True
+
+# Logging levels for Elasticsearch client
+ES_LOG_LEVEL=ERROR
+ES_TRACE_LOG_LEVEL=ERROR
+```
+
+<Note>
+For debugging Elasticsearch queries, set `ES_LOG_LEVEL=DEBUG` to log request bodies and `ES_TRACE_LOG_LEVEL=INFO` to log curl-formatted requests.
+</Note>
+
+### Email Configuration
+
+```bash
+# Email subject prefix
+EMAIL_SUBJECT_PREFIX=[mdn]
+
+# From addresses
+DEFAULT_FROM_EMAIL=no-reply@developer.mozilla.org
+SERVER_EMAIL=mdn-prod-noreply@mozilla.com
+
+# Admin notifications
+ADMIN_EMAILS=mdn-dev@mozilla.com
+ADMIN_NAMES=MDN devs
+```
+
+### Maintenance Mode
+
+See the [Maintenance Mode](/deployment/maintenance-mode) documentation for details on read-only mode configuration.
+
+```bash
+# Enable maintenance mode
+MAINTENANCE_MODE=True
+
+# Use read-only database user (optional but recommended)
+DATABASE_USER=kuma_ro
+```
+
+### Media and Static Files
+
+```bash
+# Media files URL (served from CDN in production)
+MEDIA_URL=https://developer.cdn.mozilla.net/media/
+
+# Static files URL
+STATIC_URL=https://developer.mozilla.org/static/
+```
+
+## Configuration Files
+
+### Settings Modules
+
+Kuma uses Django's settings module system:
+
+- `kuma/settings/common.py` - Base settings for all environments
+- `kuma/settings/local.py` - Development-specific settings
+- `kuma/settings/prod.py` - Production-specific settings
+- `kuma/settings/pytest.py` - Test-specific settings
+
+The active settings module is selected with:
+
+```bash
+DJANGO_SETTINGS_MODULE=kuma.settings.prod
+```
+
+### Environment File Template
+
+A sample `.env` file for local development is provided at `.env-dist.dev`:
+
+```bash
+# Copy and customize for local development
+cp .env-dist.dev .env
+```
+
+Edit the `.env` file to customize your local environment.
+
+## Production Settings
+
+In production (AWS Kubernetes), configuration is managed through:
+
+1. **ConfigMaps**: Non-sensitive configuration values
+2. **Secrets**: Sensitive values like API keys and passwords
+3. **Terraform variables**: Infrastructure-level configuration
+
+These are defined in the [mdn/infra repository](https://github.com/mdn/infra/tree/main/apps/mdn/mdn-aws).
+
+### Production Checklist
+
+<Steps>
+  <Step title="Set DEBUG=False">
+    Debug mode must be disabled in production for security and performance.
+  </Step>
+  
+  <Step title="Enable cookie security">
+    Set `CSRF_COOKIE_SECURE=True` and `SESSION_COOKIE_SECURE=True` for HTTPS.
+  </Step>
+  
+  <Step title="Configure database connection">
+    Use a production PostgreSQL instance with proper credentials and connection pooling.
+  </Step>
+  
+  <Step title="Set up Redis">
+    Configure Redis for caching and Celery with persistence enabled.
+  </Step>
+  
+  <Step title="Configure AWS S3">
+    Set up S3 bucket for media storage with proper IAM credentials.
+  </Step>
+  
+  <Step title="Enable monitoring">
+    Configure New Relic APM and Sentry for error tracking.
+  </Step>
+  
+  <Step title="Set ALLOWED_HOSTS">
+    Restrict to production domain only for security.
+  </Step>
+</Steps>
+
+## Sentry Integration
+
+Kuma uses Sentry for error tracking. Configuration is in `kuma/settings/common.py`:
+
+```python
+import sentry_sdk
+from sentry_sdk.integrations.django import DjangoIntegration
+
+# Sentry is configured automatically if DSN is set
+```
+
+Set the Sentry DSN environment variable:
+
+```bash
+SENTRY_DSN=https://your-dsn@sentry.io/project-id
+```
+
+## Cache Configuration
+
+Kuma uses Redis for caching with configurable timeouts:
+
+```python
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'TIMEOUT': 60 * 60 * 24,  # 24 hours in production
+        'KEY_PREFIX': 'kuma',
+        'LOCATION': config('REDIS_CACHE_SERVER'),
+    }
+}
+```
+
+In production, cache timeout is extended to 24 hours for better performance.

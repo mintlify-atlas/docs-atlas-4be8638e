@@ -1,0 +1,67 @@
+---
+title: API Overview
+description: Overview of the Kuma REST API built with Django Ninja
+---
+
+The Kuma API provides programmatic access to MDN Web Docs features including search, user settings, bookmarks, and notifications.
+
+## API Structure
+
+The Kuma API is built using [Django Ninja](https://django-ninja.rest-framework.com/), a web framework for building APIs with Django and Python type hints.
+
+### Base URL
+
+All API endpoints are prefixed with:
+
+```
+/api/v1/
+```
+
+### API Instances
+
+Kuma uses two Django Ninja API instances:
+
+1. **Main API** (`api`) - Standard user API with profile authentication and CSRF protection
+2. **Admin API** (`admin_api`) - Administrative endpoints with bearer token authentication, no CSRF
+
+### Response Format
+
+All API responses include a `Cache-Control: no-cache` header to prevent caching of dynamic content. This is handled by the `NoCacheNinjaAPI` class.
+
+### Rate Limiting
+
+The API includes rate limiting protection. When rate limits are exceeded, the API returns:
+
+```json
+{
+  "error": "Too many requests"
+}
+```
+
+HTTP Status: `429 Too Many Requests`
+
+## Available Endpoints
+
+The API is organized into the following modules:
+
+- **Search** - Full-text search across MDN documentation
+- **Settings** - User account and profile settings
+- **Plus/Bookmarks** - Collection management for MDN Plus subscribers
+- **Plus/Notifications** - Notification system for content updates
+- **Plus/Landing Page** - Survey endpoints for landing pages
+
+## Versioning
+
+The current API version is `v1`. The version is included in both the URL path and configured in the Django Ninja API instances.
+
+## Error Handling
+
+The API uses standard HTTP status codes:
+
+- `200` - Success
+- `201` - Created
+- `400` - Bad Request (validation errors)
+- `401` - Unauthorized
+- `404` - Not Found
+- `429` - Too Many Requests
+- `500` - Internal Server Error

@@ -1,0 +1,182 @@
+---
+title: Running Tests
+description: Learn how to run the Kuma test suite with pytest and generate coverage reports
+---
+
+Kuma has a comprehensive Python test suite built with pytest. All changes should include tests, and existing tests should not break.
+
+## Running the Full Test Suite
+
+The simplest way to run all tests is using the make command:
+
+```bash
+make test
+```
+
+This runs `py.test kuma` with the default options configured in `pytest.ini`.
+
+<Note>
+  Commands should be run inside the development environment after `make bash`.
+</Note>
+
+## Running pytest Directly
+
+For more control, run pytest directly:
+
+```bash
+py.test kuma
+```
+
+### Useful pytest Options
+
+<CodeGroup>
+```bash Drop into debugger on failure
+py.test --pdb kuma
+```
+
+```bash Create a new test database
+py.test --create-db kuma
+```
+
+```bash Show local variables in tracebacks
+py.test --showlocals kuma
+```
+
+```bash Exit on first failure
+py.test --exitfirst kuma
+```
+</CodeGroup>
+
+For a full list of options:
+
+```bash
+py.test --help
+```
+
+## Running Specific Tests
+
+You can run subsets of tests using various filters:
+
+### By Marker
+
+```bash
+# Only tests marked with 'spam'
+py.test -m spam
+
+# All tests except those marked 'spam'
+py.test -m "not spam"
+```
+
+View all available markers:
+
+```bash
+py.test --markers
+```
+
+### By Directory
+
+```bash
+# All tests in a specific app
+py.test kuma/wiki/
+
+# Ignore a specific directory
+py.test --ignore kuma/core
+```
+
+### By Name Pattern
+
+```bash
+# All tests with "foobar" in their name
+py.test -k foobar
+
+# All tests without "foobar" in their name
+py.test -k "not foobar"
+```
+
+### Specific Test
+
+Run a single test method:
+
+```bash
+py.test kuma/wiki/tests/test_views.py::RedirectTests::test_redirects_only_internal
+```
+
+## Test Coverage
+
+### Coverage Report in Terminal
+
+Run tests with coverage reporting:
+
+```bash
+make coveragetest
+```
+
+This command:
+- Cleans previous coverage data
+- Runs `py.test --cov=kuma --no-cov-on-fail kuma`
+- Generates a `coverage.xml` file
+
+### HTML Coverage Report
+
+For a detailed HTML coverage report:
+
+```bash
+make coveragetesthtml
+```
+
+This generates an interactive HTML report showing:
+- Which lines are covered by tests
+- Which lines are missing coverage
+- Branch coverage information
+
+The HTML report is configured to show test contexts (which tests covered each line).
+
+## Test Database
+
+The test suite automatically creates a test database named `test_%s` where `%s` is the value from `settings.DATABASES['default']['NAME']`.
+
+<Note>
+  Ensure your database user has `ALL` privileges on the test database.
+</Note>
+
+## Using Test Markers
+
+### Adding a Marker
+
+Markers are defined in `pytest.ini`. To use a marker in your tests:
+
+```python
+import pytest
+
+@pytest.mark.spam
+class SpamTests(TestCase):
+    ...
+
+class OtherSpamTests(TestCase):
+    @pytest.mark.spam
+    def test_something(self):
+        ...
+```
+
+## Writing Tests
+
+<Steps>
+  <Step title="Locate the tests module">
+    All apps have a `tests` module where tests should go. They will be discovered automatically by pytest.
+  </Step>
+  
+  <Step title="Write testable code">
+    Code should be written so it can be tested. New functionality should include corresponding tests.
+  </Step>
+  
+  <Step title="Follow naming conventions">
+    Test files, classes, and functions should follow pytest naming conventions (e.g., `test_*.py`, `Test*`, `test_*`).
+  </Step>
+</Steps>
+
+## Test Guidelines
+
+- **Don't change tests** unless the current behavior is demonstrably wrong
+- **Refactor tests** as long as the result is clearly the same
+- **Remove tests** when removing the corresponding code
+- **New code requires tests** - all new functionality should have test coverage

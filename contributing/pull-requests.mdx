@@ -1,0 +1,216 @@
+---
+title: Pull Requests
+description: Learn how to create effective pull requests, write good commit messages, and navigate the code review process
+---
+
+This guide covers the pull request process for Kuma, including branch naming, commit conventions, and code review expectations.
+
+## Branch Naming
+
+We prefer descriptive branch names that include a bug number. MDN staff work with multiple branches at a time, so good names help everyone remember what each branch does.
+
+### Good Patterns
+
+Follow `noun-###` or `verb-noun-###` patterns:
+
+- `cache-control-headers-1431259`
+- `update-requests-1399639`
+
+### Bad Patterns
+
+Avoid these patterns:
+
+- `bug973612` - Requires looking up bug details
+- `fix-973612` - Doesn't communicate what changes
+- `create-page` - Missing bug number
+- `1431259-cache-control-headers` - Bug number first makes tab-completion harder
+
+<Tip>
+Put the bug number at the end of the branch name to make tab-completion easier.
+</Tip>
+
+### Exceptions
+
+Some special branches don't follow these conventions:
+
+- Deployment branches: `stage-push`, `prod-push`
+- Submodule updates: `pre-push-2018-02-21`
+
+### Branch Location
+
+In general, we prefer branches are stored on your fork rather than the origin repository. Exceptions include deployment branches like `stage-push` and `prod-push`, which need to run on the continuous integration server.
+
+<Note>
+It's safe to delete branches after the pull request is closed. GitHub remembers the code changes in the PR context.
+</Note>
+
+## Commit Messages
+
+### Bug Number Requirement
+
+All commit messages must start with `bug NNNNNNN`. This format:
+
+- Makes it easier to consume the commit log
+- Links back to the Bugzilla bug where changes are discussed
+- Helps track related changes and regressions
+
+**Example:**
+
+```
+bug 1316610: Drop Crawl-delay, etc from robots.txt
+```
+
+### Using "fix bug"
+
+`fix bug NNNNNNN` can be used for commits that resolve the bug when merged. Bugzilla will automatically mark the bug as RESOLVED: FIXED.
+
+**When to use `fix bug`:**
+- Documentation updates
+- Build fixes
+- Changes that immediately fix the issue
+
+**When to avoid `fix bug`:**
+- Code that needs deployment to production to fix the issue
+- When multiple PRs are expected for the same bug
+
+### Exceptions
+
+Bug numbers may be omitted for:
+- Merge commits
+- Submodule updates
+- Updating translatable strings
+
+### Commit Message Rules
+
+Follow these [rules for great commit messages](https://chris.beams.io/posts/git-commit/):
+
+1. Separate subject line from body with a blank line
+2. Limit subject line to 50 characters
+3. Capitalize the subject line
+4. Do not end the subject line with a period
+5. Use imperative mood in the subject line
+6. Wrap the body at 72 characters
+7. Use the body to explain what and why, not how
+
+### Example Commit Message
+
+```
+bug 1316610: Drop Crawl-delay, etc from robots.txt
+
+Googlebot doesn't respect Crawl-delay, but instead watches to see how
+fast it can index your site without breaking it.
+
+Request-rate isn't known by Googlebot, and doesn't appear to be supported
+by many crawlers.
+
+MDN can be accessed faster than 5 pages per second, and we shouldn't
+penalize scrapers that respect robots.txt.
+```
+
+<Tip>
+A good commit message explains **why** you made the change, not just **what** changed. Future developers (including you) will thank you.
+</Tip>
+
+## Commit Strategy
+
+### Number of Commits
+
+We prefer one-commit pull requests that are small and focused. Multiple commit PRs are good when the solution naturally breaks into multiple steps.
+
+<Warning>
+The test suite should pass for each commit.
+</Warning>
+
+### Adding Commits During Review
+
+Once a pull request is open, make changes as additional commits. This makes it easier to review just the changes since the last review.
+
+### Squashing Commits
+
+Once a PR is approved, commits can be "squashed" into a single commit before merging. Squashing is usually decided by the reviewer, but feel free to:
+
+- Squash commits yourself
+- Ask for commits to be squashed
+- Ask for them to be kept separate
+
+## Creating a Pull Request
+
+### PR Title and Description
+
+The pull request should include:
+
+- **Title**: Bug number and summary of the change
+- **Body**: Description of the change
+
+<Note>
+A good commit message often makes a good PR message. An empty PR body is rarely appropriate.
+</Note>
+
+### For Bug Fixes
+
+Include:
+
+- Steps to reproduce the bug in a development environment
+- Suggestions for manual tests reviewers should try
+
+### What Not to Do
+
+- **Don't double-submit** - Don't submit as both a GitHub PR and a Bugzilla patch
+- Optionally, you can update the bug to link to your PR and mark yourself as the assignee
+
+## Code Review Process
+
+### Purpose of Code Review
+
+Code reviews help maintain and improve code quality. They can also be stressful, so remember:
+
+- **Reviewers should**: Point out good code as well as bad, be clear when changes are needed, offer suggestions for fixing code
+- **Authors should**: Ask questions when suggestions are unclear, ask for help if needed
+- **Both sides**: Keep reviews about the code, not the person. Follow the [Code of Conduct](https://github.com/mdn/kuma/blob/main/CODE_OF_CONDUCT.md)
+
+### Who Reviews
+
+An MDN module [owner or peer](https://wiki.mozilla.org/Modules/All#MDN) must review and merge all pull requests. They are accountable for code quality and often know when changes will have wider impact.
+
+**Exceptions:**
+- Emergency code may be merged without review (but requires follow-up review)
+- Changes that don't impact production may have exceptions
+
+### Special Review Requirements
+
+**Database changes** must be reviewed by a module owner because they:
+- Are critical and may lead to data loss
+- Are tricky to deploy, usually requiring multiple deployments
+
+**Security changes** should be reviewed outside the public repository:
+- Manually merged by a peer
+- Include `r=username` in the commit to indicate the reviewer
+
+### Understanding "Nits"
+
+A "nit" is a style preference that isn't important enough to reject a PR. Feel free to fix or ignore nits as you prefer.
+
+## Pull Request Labels
+
+We use these labels:
+
+- **manual merge** - PR is ready but needs additional steps outside code review to merge
+- **not ready** - Author says the PR isn't ready for review (e.g., needs tests or documentation)
+
+## Merging
+
+In general, the reviewer merges the pull request.
+
+When reviewing a PR from a staff member, a reviewer may approve the PR with minor nits and let the author merge after fixing them.
+
+## Deployment
+
+MDN staff deploy new code one to three times a week. View currently deployed code on the [What's Deployed?](https://whatsdeployed.io/s-HC0) page.
+
+### Closing Bugs
+
+Once a bug fix is in production, the bug can be marked as RESOLVED: FIXED.
+
+<Note>
+Your code doesn't immediately go to production when merged. It will be deployed in the next scheduled deployment.
+</Note>

@@ -1,0 +1,386 @@
+---
+title: Bookmarks
+description: Personal collections feature allowing MDN Plus users to save, organize, and annotate documentation pages
+---
+
+The bookmarks system (also called "Collections") enables authenticated users to save MDN documentation pages with custom names and notes, creating personalized reference libraries.
+
+## Overview
+
+Bookmarks allow users to:
+- Save documentation pages for quick access
+- Add custom names and notes to saved pages
+- Search and filter their collections
+- Sync bookmarks across devices via their Mozilla account
+
+<Info>
+Free users are limited to a fixed number of bookmarks. MDN Plus subscribers have unlimited bookmarks.
+</Info>
+
+## Bookmark Model
+
+The `Bookmark` model (kuma/bookmarks/models.py:7) represents a saved documentation page.
+
+### Core Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `documenturl` | ForeignKey | Reference to the DocumentURL being bookmarked |
+| `user` | ForeignKey | The user who created the bookmark |
+| `custom_name` | CharField(500) | Optional custom title (overrides document title) |
+| `notes` | CharField(500) | User's personal notes about the page |
+| `deleted` | DateTimeField | Soft-delete timestamp (null if active) |
+| `created` | DateTimeField | When the bookmark was created |
+| `modified` | DateTimeField | Last modification time |
+
+### Unique Constraint
+
+```python
+class Meta:
+    unique_together = ["documenturl", "user_id"]
+```
+
+A user can only bookmark each document once, preventing duplicates.
+
+### Title Resolution
+
+The bookmark's display title is determined by the `title` property (kuma/bookmarks/models.py:31):
+
+```python
+@property
+def title(self):
+    return self.custom_name or self.documenturl.metadata["title"]
+```
+
+This allows users to rename bookmarks while defaulting to the document's original title.
+
+### Custom Name Optimization
+
+The model automatically removes redundant custom names (kuma/bookmarks/models.py:22):
+
+```python
+def save(self, *args, **kwargs):
+    if self.custom_name == self.documenturl.metadata["title"]:
+        self.custom_name = ""
+    super().save(*args, **kwargs)
+```
+
+If the custom name matches the document's title, it's cleared to save space.
+
+## API Endpoints
+
+The bookmarks API is mounted at `/api/v1/plus/collection/` (kuma/api/v1/plus/bookmarks.py).
+
+### List Bookmarks
+
+**Endpoint**: `GET /api/v1/plus/collection/`
+
+**Query Parameters**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `limit` | integer | Results per page (default: 20, min: 1) |
+| `offset` | integer | Pagination offset (default: 0, min: 1) |
+| `q` | string | Search in titles and notes |
+| `sort` | string | Sort by `title` or `-created` (default) |
+
+**Response**:
+
+```json
+{
+  "items": [
+    {
+      "id": 123,
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript",
+      "title": "JavaScript",
+      "notes": "Review closures section",
+      "parents": [{"uri": "/en-us/docs/web", "title": "Web"}],
+      "created": "2024-03-15T10:30:00Z"
+    }
+  ],
+  "csrfmiddlewaretoken": "abc123...",
+  "subscription_limit_reached": false
+}
+```
+
+### Get Single Bookmark
+
+**Endpoint**: `GET /api/v1/plus/collection/?url={page_url}`
+
+**Response**:
+
+```json
+{
+  "bookmarked": {
+    "id": 123,
+    "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript",
+    "title": "My JS Notes",
+    "notes": "Important reference",
+    "parents": [...],
+    "created": "2024-03-15T10:30:00Z"
+  },
+  "csrfmiddlewaretoken": "abc123...",
+  "subscription_limit_reached": false
+}
+```
+
+Returns `null` for `bookmarked` if the page is not bookmarked.
+
+### Create/Update Bookmark
+
+**Endpoint**: `POST /api/v1/plus/collection/`
+
+**Parameters**:
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `url` | string | Yes | Document URL path (e.g., `/en-US/docs/Web/JavaScript`) |
+| `name` | string | No | Custom display name (max 500 chars) |
+| `notes` | string | No | Personal notes (max 500 chars) |
+| `delete` | boolean | No | If true, deletes the bookmark |
+
+**Create Response** (201):
+
+```json
+{
+  "subscription_limit_reached": false,
+  "ok": true
+}
+```
+
+**Update Response** (200):
+
+```json
+{
+  "subscription_limit_reached": false,
+  "ok": true
+}
+```
+
+**Limit Reached Response** (400):
+
+```json
+{
+  "error": "max_subscriptions",
+  "info": {"max_allowed": 5}
+}
+```
+
+## Bookmark Lifecycle
+
+### Creation Flow (kuma/api/v1/plus/bookmarks.py:160)
+
+<Card title="Bookmark Creation Process" icon="bookmark">
+  1. **DocumentURL Resolution**: Find or create DocumentURL for the page
+  2. **Limit Check**: Verify user hasn't exceeded their limit
+  3. **Upsert**: Create new bookmark or restore soft-deleted one
+  4. **Metadata**: Apply custom name and notes
+</Card>
+
+```python
+# Check subscription limits
+if not profile.is_subscriber and subscription_limit_reached:
+    return 400, {
+        "error": "max_subscriptions",
+        "info": {"max_allowed": MAX_NON_SUBSCRIBED["collection"]}
+    }
+
+# Create or undelete bookmark
+if bookmark:
+    bookmark.deleted = None  # Restore if soft-deleted
+else:
+    bookmark = request.user.bookmark_set.create(documenturl=documenturl)
+
+# Apply custom metadata
+if name is not None:
+    bookmark.custom_name = name[:500]
+if notes is not None:
+    bookmark.notes = notes[:500]
+
+bookmark.save()
+```
+
+### Update Flow
+
+<Note>
+Updating a bookmark only modifies the custom name and notes. The DocumentURL cannot be changed.
+</Note>
+
+Updates follow the same endpoint but with an existing bookmark:
+
+```python
+if bookmark and not bookmark.deleted:
+    if name is not None:
+        bookmark.custom_name = name[:500]
+    if notes is not None:
+        bookmark.notes = notes[:500]
+    bookmark.save()
+    return 201, {"subscription_limit_reached": ..., "ok": True}
+```
+
+### Deletion (Soft Delete)
+
+Bookmarks are soft-deleted by setting the `deleted` timestamp:
+
+```python
+if delete:
+    if bookmark and not bookmark.deleted:
+        bookmark.deleted = timezone.now()
+        bookmark.save()
+    return 200, {"subscription_limit_reached": ..., "ok": True}
+```
+
+This allows:
+- Immediate restoration by re-bookmarking the same URL
+- Audit trails of bookmark history
+- Recovery from accidental deletion
+
+## DocumentURL Integration
+
+Bookmarks rely on the DocumentURL system (see [Document Management](/features/document-management)) for metadata.
+
+### Lazy DocumentURL Creation (kuma/api/v1/plus/bookmarks.py:167)
+
+When bookmarking a new page:
+
+```python
+try:
+    documenturl = DocumentURL.objects.get(uri=DocumentURL.normalize_uri(url))
+    assert not documenturl.invalid
+except DocumentURL.DoesNotExist:
+    # Fetch metadata from Yari
+    absolute_url = f"{settings.BOOKMARKS_BASE_URL}{url}/index.json"
+    response = download_url(absolute_url)
+    full_metadata = response.json()["doc"]
+    
+    # Extract essential fields
+    metadata = {}
+    for key in ("title", "mdn_url", "parents"):
+        if key in full_metadata:
+            metadata[key] = full_metadata[key]
+    
+    # Create DocumentURL
+    documenturl = DocumentURL.objects.create(
+        uri=DocumentURL.normalize_uri(url),
+        absolute_url=absolute_url,
+        metadata=metadata,
+    )
+```
+
+This ensures DocumentURL records are created only when needed.
+
+## Search and Filtering
+
+### Text Search (kuma/api/v1/plus/bookmarks.py:136)
+
+The `q` parameter searches in both custom names and notes:
+
+```python
+if filters.terms:
+    qs = qs.filter(
+        Q(display_title__icontains=filters.terms)
+        | Q(notes__icontains=filters.terms)
+    )
+```
+
+Searches are case-insensitive substring matches.
+
+### Sorting
+
+**By Created Date** (default):
+```python
+qs = Bookmark.objects.filter(user_id=user.id, deleted__isnull=True)
+    .order_by("-created")
+```
+
+**By Title** (alphabetical):
+```python
+if filters.sort == "title":
+    qs = qs.annotate(
+        display_title=Case(
+            When(custom_name="", then=Cast("documenturl__metadata__title", CharField())),
+            default=F("custom_name"),
+        )
+    ).order_by("display_title")
+```
+
+The `display_title` annotation resolves the effective title (custom name or document title) for sorting.
+
+## Subscription Limits
+
+<Info>
+Subscription limits are configured in `settings.common.MAX_NON_SUBSCRIBED` and vary by feature.
+</Info>
+
+### Limit Enforcement
+
+Non-subscribers are limited to a fixed number of bookmarks:
+
+```python
+MAX_NON_SUBSCRIBED = {
+    "collection": 5,  # Example limit
+    "notification": 10,
+}
+```
+
+### Limit Checking
+
+The API includes limit status in responses:
+
+```python
+if not profile.is_subscriber:
+    response["subscription_limit_reached"] = (
+        user.bookmark_set.filter(deleted=None).count()
+        >= MAX_NON_SUBSCRIBED["collection"]
+    )
+```
+
+This allows the UI to show upgrade prompts when limits are reached.
+
+## Schema Definitions
+
+The API uses Pydantic schemas for validation and serialization (kuma/api/v1/plus/bookmarks.py:32).
+
+### CollectionItemSchema
+
+```python
+class CollectionItemSchema(Schema):
+    id: int
+    url: str
+    title: str
+    notes: str
+    parents: list[CollectionParent]
+    created: datetime
+    
+    @staticmethod
+    def resolve_url(bookmark):
+        return bookmark.documenturl.metadata["mdn_url"]
+    
+    @staticmethod
+    def resolve_parents(bookmark):
+        return bookmark.documenturl.metadata.get("parents", [])[:-1]
+```
+
+The schema automatically resolves:
+- `url`: From DocumentURL metadata
+- `title`: Via the bookmark's `title` property
+- `parents`: Breadcrumb trail (excluding the current page)
+
+## Related Features
+
+### Cross-Device Sync
+
+Bookmarks are tied to the user's Mozilla account, automatically syncing across:
+- Desktop browsers
+- Mobile devices
+- Multiple computers
+
+### Integration with Notifications
+
+Users can watch bookmarked pages for updates. See [Notifications](/features/notifications) for details.
+
+## Related Resources
+
+- [Document Management](/features/document-management)
+- [User Authentication](/features/user-authentication)
+- [Notifications Feature](/features/notifications)

@@ -1,0 +1,92 @@
+---
+title: Introduction to Kuma
+description: Learn about Kuma, the Django-based platform that powered MDN Web Docs from its inception until July 2022
+---
+
+<Warning>
+  Kuma was superseded by [Rumba](https://github.com/mdn/rumba) in July 2022. This documentation is maintained for historical reference and for teams working with legacy Kuma instances.
+</Warning>
+
+## Overview
+
+Kuma is the Django-based platform that powered [MDN (developer.mozilla.org)](https://developer.mozilla.org), providing the backend infrastructure for one of the web's most comprehensive developer documentation resources.
+
+Built by Mozilla, Kuma served as the content management and delivery system for MDN Web Docs, handling millions of page views and serving documentation to developers worldwide.
+
+## Key capabilities
+
+Kuma provided a comprehensive platform for managing technical documentation at scale:
+
+- **Content management**: Full-featured wiki system for creating and editing documentation
+- **User authentication**: OAuth integration with Firefox Accounts for secure user access
+- **Search functionality**: Elasticsearch-powered search across documentation
+- **API services**: RESTful APIs for bookmarks, notifications, and user management
+- **Internationalization**: Support for 11 languages including English, Japanese, Chinese, French, and more
+- **Asynchronous processing**: Background task handling for emails, notifications, and data processing
+- **File attachments**: Secure storage and delivery of code samples and media files
+
+## Get started
+
+<CardGroup cols={2}>
+  <Card title="Architecture overview" icon="sitemap" href="/architecture">
+    Understand the Django apps, tech stack, and how components interact
+  </Card>
+  
+  <Card title="Deprecation notice" icon="triangle-exclamation" href="/deprecation-notice">
+    Learn about the transition from Kuma to Rumba
+  </Card>
+  
+  <Card title="View on GitHub" icon="github" href="https://github.com/mdn/kuma">
+    Explore the source code and documentation
+  </Card>
+  
+  <Card title="Development setup" icon="docker" href="https://kuma.readthedocs.io/en/latest/installation.html">
+    Set up a local Kuma instance using Docker
+  </Card>
+</CardGroup>
+
+## Platform features
+
+### For content creators
+
+Kuma enabled documentation authors to:
+
+- Create and edit documentation pages through a web interface
+- Collaborate with other contributors on content improvements
+- Track changes and manage revisions
+- Localize content into multiple languages
+- Embed interactive code examples and media
+
+### For developers
+
+The platform offered developers:
+
+- RESTful APIs for integrating MDN data
+- OAuth authentication flows with Firefox Accounts
+- Bookmark management for saving favorite documentation
+- Notification system for content updates
+- MDN Plus premium features including enhanced collections
+
+## Technology highlights
+
+Kuma was built using modern Python and JavaScript technologies:
+
+- Django web framework for robust backend services
+- PostgreSQL for reliable data storage
+- Redis for caching and message brokering
+- Celery for asynchronous task processing
+- Elasticsearch for powerful search capabilities
+- Docker for consistent development and deployment environments
+
+## Community and support
+
+<Note>
+  Active development of Kuma ceased in July 2022 when it was replaced by Rumba. For current MDN platform questions, please refer to the [MDN Community](https://discourse.mozilla.org/c/mdn) on Mozilla Discourse.
+</Note>
+
+Historical resources:
+
+- **Code repository**: [github.com/mdn/kuma](https://github.com/mdn/kuma)
+- **Documentation**: [kuma.readthedocs.io](https://kuma.readthedocs.io/)
+- **Production site**: [developer.mozilla.org](https://developer.mozilla.org)
+- **Staging environment**: [developer.allizom.org](https://developer.allizom.org)
